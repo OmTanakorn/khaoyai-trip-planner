@@ -7,6 +7,7 @@ import { ItineraryTab } from './components/ItineraryTab';
 import { ExpensesTab } from './components/ExpensesTab';
 import { PackingTab } from './components/PackingTab';
 import { MembersTab } from './components/MembersTab';
+import { DayOfTab } from './components/DayOfTab';
 import { SyncModal } from './components/SyncModal';
 import { ShareModal } from './components/ShareModal';
 import { TripData } from './types/trip';
@@ -17,13 +18,23 @@ import {
   isFirebaseConnected,
   TripUpdate,
 } from './services/storage';
+import { getMyMemberId, setMyMemberId } from './services/identity';
 
 export function App() {
   const [trip, setTrip] = useState<TripData>(initialTripData);
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [myMemberId, setMyMemberIdState] = useState<string | null>(getMyMemberId);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const isFirebase = isFirebaseConnected();
+
+  const me = trip.members.find((m) => m.id === myMemberId) ?? null;
+
+  const chooseMyMember = (id: string | null) => {
+    setMyMemberId(id);
+    setMyMemberIdState(id);
+  };
 
   // Subscribe to realtime changes (Firestore or LocalStorage event)
   useEffect(() => {
@@ -34,6 +45,7 @@ export function App() {
       },
       (err) => {
         console.warn('Realtime sync notification:', err);
+        setSyncError('เชื่อมต่อกับคลาวด์ไม่ได้ การแก้ไขจะเก็บไว้ในเครื่องนี้ก่อน');
       }
     );
 
@@ -49,9 +61,12 @@ export function App() {
       typeof update === 'function' ? update(current) : update
     );
 
-    persistTripData(trip.id, update).catch((err) => {
-      console.error('Error persisting trip update:', err);
-    });
+    persistTripData(trip.id, update)
+      .then(() => setSyncError(null))
+      .catch((err) => {
+        console.error('Error persisting trip update:', err);
+        setSyncError('บันทึกขึ้นคลาวด์ไม่สำเร็จ เพื่อนจะยังไม่เห็นการแก้ไขนี้');
+      });
   };
 
   const confirmedCount = trip.members.filter((m) => m.status === 'confirmed').length;
@@ -66,6 +81,10 @@ export function App() {
         onOpenSyncModal={() => setIsSyncModalOpen(true)}
         onShare={() => setIsShareModalOpen(true)}
         confirmedCount={confirmedCount}
+        members={trip.members}
+        me={me}
+        onChooseMe={chooseMyMember}
+        syncError={syncError}
       />
 
       {/* Main Content Area */}
@@ -93,6 +112,7 @@ export function App() {
           <AccommodationTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
+            me={me}
           />
         )}
 
@@ -100,6 +120,7 @@ export function App() {
           <ItineraryTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
+            me={me}
           />
         )}
 
@@ -115,6 +136,10 @@ export function App() {
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
           />
+        )}
+
+        {activeTab === 'dayof' && (
+          <DayOfTab trip={trip} me={me} setActiveTab={setActiveTab} />
         )}
 
         {activeTab === 'members' && (

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Send, ArrowRight } from 'lucide-react';
+import { Plus, Send, ArrowRight, Trash2 } from 'lucide-react';
 import { TripData, Member } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 
@@ -62,6 +62,15 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     }));
     setNewAnnouncement('');
     setShowAnnounceForm(false);
+  };
+
+  const handleDeleteAnnouncement = (id: string) => {
+    const item = trip.announcements.find((a) => a.id === id);
+    if (!window.confirm(`ลบข้อความของ ${item?.author ?? 'คนนี้'} ออกจากบอร์ด?`)) return;
+    onUpdateTrip((t) => ({
+      ...t,
+      announcements: t.announcements.filter((a) => a.id !== id),
+    }));
   };
 
   const handleQuickRsvp = (e: React.FormEvent) => {
@@ -293,11 +302,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           ) : (
             <ul className="mt-6 divide-y divide-mist-deep">
               {trip.announcements.map((item) => (
-                <li key={item.id} className="py-5 first:pt-0">
-                  <p className="text-body text-ink">{item.text}</p>
-                  <p className="mt-2 text-fine text-stone">
-                    {item.author} · {item.date}
-                  </p>
+                <li key={item.id} className="py-5 first:pt-0 flex items-start gap-4">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-body text-ink">{item.text}</p>
+                    <p className="mt-2 text-fine text-stone">
+                      {item.author} · {item.date}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteAnnouncement(item.id)}
+                    className="text-stone hover:text-ink transition-colors shrink-0"
+                    aria-label={`ลบข้อความของ ${item.author}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </li>
               ))}
             </ul>

@@ -1,0 +1,19 @@
+{
+  "name": "ทริปเขาใหญ่",
+  "short_name": "เขาใหญ่",
+  "description": "แผนทริปเขาใหญ่ 31 ต.ค. — 1 พ.ย. รถ ที่พัก ตารางเที่ยว และค่าใช้จ่าย",
+  "lang": "th",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#12211C",
+  "theme_color": "#12211C",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

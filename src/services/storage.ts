@@ -1,6 +1,9 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import {
+  initializeFirestore,
   getFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc,
   onSnapshot,
   setDoc,
@@ -108,7 +111,19 @@ function initFirebase(): Firestore | null {
     } else {
       firebaseApp = getApp();
     }
-    firestoreDb = getFirestore(firebaseApp);
+    try {
+      // Keep a copy of the trip in the browser so it opens and stays editable
+      // where the signal drops — which is most of Khao Yai. Firestore replays
+      // the queued writes once it reconnects.
+      firestoreDb = initializeFirestore(firebaseApp, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+      });
+    } catch {
+      // Already initialised on this page, or the browser refuses storage.
+      firestoreDb = getFirestore(firebaseApp);
+    }
     return firestoreDb;
   } catch (err) {
     console.error('Failed to initialize Firebase:', err);

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Pencil } from 'lucide-react';
 import { TripData, Expense } from '../types/trip';
+import { calculateBalances, settleUp } from '../services/settlement';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Meter } from './ui';
 import { input, btnSolid, btnQuiet, btnLink, baht } from './ui-kit';
@@ -28,12 +29,20 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
   const [category, setCategory] = useState<Expense['category']>('food');
   const [notes, setNotes] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [splitBetween, setSplitBetween] = useState<string[]>([]);
 
-  const confirmedMembers = trip.members.filter((m) => m.status === 'confirmed');
-  const memberCount = confirmedMembers.length || 1;
 
   const totalExpense = trip.expenses.reduce((sum, e) => sum + e.amount, 0);
-  const perPerson = Math.round(totalExpense / memberCount);
+
+  const balances = calculateBalances(trip.expenses, trip.members);
+  // Shares can be uneven now, so this is an average rather than what anyone
+  // actually owes. The transfers below are the real answer.
+  const averageShare = balances.length
+    ? Math.round(totalExpense / balances.length)
+    : 0;
+  const transfers = settleUp(balances);
+  const nameOf = (id: string) =>
+    trip.members.find((m) => m.id === id)?.nickname ?? 'ไม่ระบุ';
 
   const categoryTotals = trip.expenses.reduce(
     (acc, curr) => {
@@ -43,14 +52,6 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
     {} as Record<string, number>
   );
 
-  const memberPaidMap: Record<string, number> = {};
-  trip.members.forEach((m) => {
-    memberPaidMap[m.id] = 0;
-  });
-  trip.expenses.forEach((e) => {
-    memberPaidMap[e.payerId] = (memberPaidMap[e.payerId] || 0) + e.amount;
-  });
-
   const handleOpenNewModal = () => {
     setEditingExpense(null);
     setTitle('');
@@ -59,6 +60,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
     setCategory('food');
     setNotes('');
     setDate(new Date().toISOString().split('T')[0]);
+    setSplitBetween([]);
     setIsExpenseModalOpen(true);
   };
 
@@ -70,6 +72,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
     setCategory(exp.category);
     setNotes(exp.notes || '');
     setDate(exp.date);
+    setSplitBetween(exp.splitBetween ?? []);
     setIsExpenseModalOpen(true);
   };
 
@@ -82,7 +85,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
         ...t,
         expenses: t.expenses.map((exp) =>
           exp.id === editingExpense.id
-            ? { ...exp, title, amount: Number(amount), payerId, category, notes, date }
+            ? { ...exp, title, amount: Number(amount), payerId, category, notes, date, splitBetween }
             : exp
         ),
       }));
@@ -93,7 +96,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
         amount: Number(amount),
         payerId,
         category,
-        splitBetween: [],
+        splitBetween,
         date,
         notes,
       };
@@ -130,7 +133,8 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
           {baht(totalExpense)}
         </p>
         <p className="mt-4 text-body text-mist/70">
-          หารกัน {memberCount} คน ตกคนละ {baht(perPerson)} · บันทึกไว้ {trip.expenses.length} รายการ
+          {balances.length > 0 && `เฉลี่ยคนละ ${baht(averageShare)} · `}
+          บันทึกไว้ {trip.expenses.length} รายการ
         </p>
       </div>
 
@@ -166,50 +170,60 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
         </Panel>
 
         <Panel>
-          <h2 className="font-display text-lead text-ink">ใครต้องโอนเพิ่ม</h2>
+          <h2 className="font-display text-lead text-ink">ใครโอนให้ใคร</h2>
           <p className="mt-2 text-fine text-stone border-b border-mist-deep pb-5">
-            ยอดสุทธิ คือเงินที่ออกไปแล้ว ลบด้วยส่วนเฉลี่ย {baht(perPerson)}
+            โอนตามนี้แล้วจบ ไม่ต้องคิดต่อ
           </p>
 
-          {confirmedMembers.length === 0 ? (
+          {transfers.length === 0 ? (
             <p className="mt-6 text-body text-stone">
-              ยังไม่มีใครคอนเฟิร์มไป เพิ่มชื่อเพื่อนก่อนแล้วยอดจะคำนวณให้เอง
+              {trip.expenses.length === 0
+                ? 'ยังไม่มีรายการ พอเริ่มบันทึกแล้วยอดโอนจะขึ้นตรงนี้'
+                : 'ทุกคนจ่ายพอดีแล้ว ไม่มีใครต้องโอนใคร'}
             </p>
           ) : (
             <ul className="mt-2 divide-y divide-mist-deep">
-              {confirmedMembers.map((member) => {
-                const paid = memberPaidMap[member.id] || 0;
-                const netBalance = paid - perPerson;
-                const isOwed = netBalance > 0;
-                const isEven = netBalance === 0;
-
-                return (
-                  <li key={member.id} className="py-4 flex items-center justify-between gap-4">
-                    <span className="inline-flex items-center gap-2.5 min-w-0">
-                      <span
-                        className="w-1.5 h-1.5 shrink-0"
-                        style={{ backgroundColor: member.avatarColor }}
-                        aria-hidden="true"
-                      />
-                      <span className="text-body text-ink truncate">{member.nickname}</span>
-                      <span className="text-fine text-stone shrink-0">
-                        ออกไป {baht(paid)}
-                      </span>
-                    </span>
-
-                    <span className="text-right shrink-0">
-                      <span className={`block text-body ${isEven ? 'text-stone' : 'text-ink'}`}>
-                        {isOwed
-                          ? `รับคืน ${baht(netBalance)}`
-                          : isEven
-                            ? 'พอดี'
-                            : `โอนเพิ่ม ${baht(Math.abs(netBalance))}`}
-                      </span>
-                    </span>
-                  </li>
-                );
-              })}
+              {transfers.map((tr, i) => (
+                <li
+                  key={`${tr.fromId}-${tr.toId}-${i}`}
+                  className="py-4 flex items-center justify-between gap-4"
+                >
+                  <span className="text-body text-ink truncate">
+                    {nameOf(tr.fromId)} <span className="text-stone">โอนให้</span>{' '}
+                    {nameOf(tr.toId)}
+                  </span>
+                  <span className="text-body text-ink shrink-0">{baht(tr.amount)}</span>
+                </li>
+              ))}
             </ul>
+          )}
+
+          {balances.length > 0 && (
+            <details className="mt-6 pt-5 border-t border-mist-deep">
+              <summary className="text-fine text-stone cursor-pointer hover:text-ink">
+                ดูยอดของแต่ละคน
+              </summary>
+              <ul className="mt-4 divide-y divide-mist-deep">
+                {balances.map((b) => {
+                  const member = trip.members.find((m) => m.id === b.memberId);
+                  return (
+                    <li key={b.memberId} className="py-3 flex items-center justify-between gap-4">
+                      <span className="inline-flex items-center gap-2.5 min-w-0">
+                        <span
+                          className="w-1.5 h-1.5 shrink-0"
+                          style={{ backgroundColor: member?.avatarColor }}
+                          aria-hidden="true"
+                        />
+                        <span className="text-body text-ink truncate">{member?.nickname}</span>
+                      </span>
+                      <span className="text-fine text-stone shrink-0">
+                        ออกไป {baht(b.paid)} · ส่วนตัวเอง {baht(b.owes)}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </details>
           )}
         </Panel>
       </div>
@@ -242,7 +256,10 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
                     <p className="text-body text-ink">{exp.title}</p>
                     <p className="mt-1 text-fine text-stone">
                       {CATEGORY_LABEL[exp.category]} · {payer?.nickname || 'ไม่ระบุคนจ่าย'} ·{' '}
-                      {exp.date}
+                      {exp.date} ·{' '}
+                      {exp.splitBetween?.length
+                        ? `หาร ${exp.splitBetween.map(nameOf).join(' ')}`
+                        : 'หารทุกคน'}
                       {exp.notes && ` · ${exp.notes}`}
                     </p>
                   </div>
@@ -344,6 +361,50 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
                 />
               </Field>
             </div>
+
+            <fieldset className="border-t border-mist-deep pt-5">
+              <legend className="text-fine text-stone mb-3">ใครหารบ้าง</legend>
+              <p className="text-fine text-stone mb-4">
+                ไม่เลือกใครเลย = หารกับทุกคนที่ไปแน่ ใช้กับค่าที่พักหรือของกองกลาง
+              </p>
+              <div className="flex flex-wrap gap-x-5 gap-y-3">
+                {trip.members
+                  .filter((m) => m.status !== 'declined')
+                  .map((m) => (
+                    <label
+                      key={m.id}
+                      className="inline-flex items-center gap-2 text-body text-ink cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={splitBetween.includes(m.id)}
+                        onChange={(e) =>
+                          setSplitBetween((current) =>
+                            e.target.checked
+                              ? [...current, m.id]
+                              : current.filter((id) => id !== m.id)
+                          )
+                        }
+                        className="w-4 h-4 accent-brass"
+                      />
+                      {m.nickname}
+                    </label>
+                  ))}
+              </div>
+              {splitBetween.length > 0 && amount ? (
+                <p className="mt-4 text-fine text-stone">
+                  หาร {splitBetween.length} คน ตกคนละ{' '}
+                  {baht(Math.floor(Number(amount) / splitBetween.length))}
+                  <button
+                    type="button"
+                    onClick={() => setSplitBetween([])}
+                    className="ml-4 text-ink border-b border-brass pb-0.5 hover:text-brass transition-colors"
+                  >
+                    หารทุกคนแทน
+                  </button>
+                </p>
+              ) : null}
+            </fieldset>
 
             <Field label="หมายเหตุ" htmlFor="exp-notes">
               <input

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Pencil, ExternalLink } from 'lucide-react';
-import { TripData, Activity, PlaceIdea } from '../types/trip';
+import { TripData, Activity, PlaceIdea, Member } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty } from './ui';
 import { input, btnSolid, btnQuiet, btnLink } from './ui-kit';
@@ -8,7 +8,19 @@ import { input, btnSolid, btnQuiet, btnLink } from './ui-kit';
 interface ItineraryTabProps {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
+  me: Member | null;
 }
+
+/**
+ * Order a day by the clock, not by the order people happened to add things.
+ * Times are free text ("08:00 – 09:30"), so read the first HH:MM and leave
+ * anything unreadable at the end rather than guessing.
+ */
+const startMinutes = (time: string): number => {
+  const match = time.match(/(\d{1,2}):(\d{2})/);
+  if (!match) return Number.MAX_SAFE_INTEGER;
+  return Number(match[1]) * 60 + Number(match[2]);
+};
 
 const CATEGORY_LABEL: Record<Activity['category'] | PlaceIdea['category'], string> = {
   travel: 'เดินทาง',
@@ -21,7 +33,7 @@ const CATEGORY_LABEL: Record<Activity['category'] | PlaceIdea['category'], strin
   other: 'อื่น ๆ',
 };
 
-export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onUpdateTrip }) => {
+export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onUpdateTrip, me }) => {
   const [selectedDayNumber, setSelectedDayNumber] = useState(1);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [isWishlistModalOpen, setIsWishlistModalOpen] = useState(false);
@@ -41,8 +53,15 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onUpdateTrip }
   const [ideaSuggestedBy, setIdeaSuggestedBy] = useState('');
   const [ideaNotes, setIdeaNotes] = useState('');
 
-  const currentDay =
+  const rawDay =
     trip.itinerary.find((d) => d.dayNumber === selectedDayNumber) || trip.itinerary[0];
+
+  const currentDay = rawDay && {
+    ...rawDay,
+    activities: [...rawDay.activities].sort(
+      (a, b) => startMinutes(a.time) - startMinutes(b.time)
+    ),
+  };
 
   const handleOpenNewActivityModal = () => {
     setEditingActivity(null);
@@ -142,7 +161,8 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onUpdateTrip }
   };
 
   const handleVotePlaceIdea = (ideaId: string) => {
-    const voter = 'ฉัน';
+    if (!me) return;
+    const voter = me.id;
     const isAdding = !trip.placeIdeas
       .find((i) => i.id === ideaId)
       ?.votes.includes(voter);
@@ -245,10 +265,13 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onUpdateTrip }
                 <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
                   <button
                     onClick={() => handleVotePlaceIdea(idea.id)}
-                    aria-pressed={idea.votes.includes('ฉัน')}
-                    className={btnLink}
+                    disabled={!me}
+                    aria-pressed={!!me && idea.votes.includes(me.id)}
+                    title={me ? undefined : 'เลือกชื่อคุณที่มุมขวาบนก่อนจึงจะโหวตได้'}
+                    className={`${btnLink} disabled:opacity-40 disabled:pointer-events-none`}
                   >
-                    {idea.votes.includes('ฉัน') ? 'โหวตแล้ว' : 'อยากไปที่นี่'} {idea.votes.length}
+                    {me && idea.votes.includes(me.id) ? 'โหวตแล้ว' : 'อยากไปที่นี่'}{' '}
+                    {idea.votes.length}
                   </button>
                   {trip.itinerary.map((day) => (
                     <button

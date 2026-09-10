@@ -1,21 +1,31 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, ExternalLink } from 'lucide-react';
-import { TripData, AccommodationOption, Room } from '../types/trip';
+import { Plus, Trash2, ExternalLink, X } from 'lucide-react';
+import { TripData, AccommodationOption, Room, Member } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Tag, Meter } from './ui';
-import { input, btnSolid, btnQuiet, btnBrass, btnLink, baht } from './ui-kit';
+import { input, btnSolid, btnQuiet, btnBrass, btnLink, baht, voterLabel } from './ui-kit';
 
 interface AccommodationTabProps {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
+  me: Member | null;
 }
 
 const FALLBACK_IMAGE =
   'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=1000&q=80';
 
-export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpdateTrip }) => {
+export const AccommodationTab: React.FC<AccommodationTabProps> = ({
+  trip,
+  onUpdateTrip,
+  me,
+}) => {
   const [isNewOptionModalOpen, setIsNewOptionModalOpen] = useState(false);
-  const [voterName, setVoterName] = useState('');
+  const [bookingOption, setBookingOption] = useState<AccommodationOption | null>(null);
+  const [checkIn, setCheckIn] = useState('14:00 น.');
+  const [checkOut, setCheckOut] = useState('11:00 น.');
+  const [wifiSsid, setWifiSsid] = useState('');
+  const [wifiPassword, setWifiPassword] = useState('');
+  const [assigningRoomId, setAssigningRoomId] = useState<string | null>(null);
 
   const [optionName, setOptionName] = useState('');
   const [optionLocation, setOptionLocation] = useState('');
@@ -32,7 +42,8 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
   const mostVotes = Math.max(0, ...trip.accommodationOptions.map((o) => o.votes.length));
 
   const handleVote = (optionId: string) => {
-    const voter = voterName.trim() || 'ฉัน';
+    if (!me) return;
+    const voter = me.id;
     // Decided here, from what this person sees, so a retry cannot flip the
     // vote back and forth.
     const isAdding = !trip.accommodationOptions
@@ -99,8 +110,10 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
     }));
   };
 
-  const handleFinalizeAccommodation = (option: AccommodationOption) => {
-    if (!window.confirm(`เลือก ${option.name} เป็นที่พักของทริปนี้?`)) return;
+  const handleFinalizeAccommodation = (e: React.FormEvent) => {
+    e.preventDefault();
+    const option = bookingOption;
+    if (!option) return;
 
     const rooms: Room[] = Array.from({ length: option.bedrooms }, (_, i) => ({
       id: `r-${i + 1}`,
@@ -121,15 +134,55 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
         villaType: `พูลวิลล่าส่วนตัว ${option.bedrooms} ห้องนอน ${option.bathrooms} ห้องน้ำ รองรับได้ ${option.capacity} คน`,
         address: option.location,
         mapUrl: option.linkUrl || 'https://maps.google.com/?q=Khao+Yai',
-        checkIn: '14:00 น.',
-        checkOut: '11:30 น.',
+        checkIn: checkIn.trim(),
+        checkOut: checkOut.trim(),
         totalBedrooms: option.bedrooms,
         totalBathrooms: option.bathrooms,
-        wifiSsid: 'Villa_Wifi',
-        wifiPassword: 'khaoyaitrip2026',
+        // Left blank until someone has the real thing from the host.
+        wifiSsid: wifiSsid.trim() || undefined,
+        wifiPassword: wifiPassword.trim() || undefined,
         rooms,
       },
     }));
+    setBookingOption(null);
+  };
+
+  /** Move someone into a room, taking them out of whichever room they were in. */
+  const handleAssignGuest = (roomId: string, memberId: string) => {
+    onUpdateTrip((t) => {
+      if (!t.confirmedAccommodation) return t;
+      return {
+        ...t,
+        confirmedAccommodation: {
+          ...t.confirmedAccommodation,
+          rooms: t.confirmedAccommodation.rooms.map((room) => {
+            const without = room.guestIds.filter((id) => id !== memberId);
+            if (room.id !== roomId) return { ...room, guestIds: without };
+            // Capacity is re-checked here against the newest data.
+            const isFull = without.length >= room.capacity;
+            return { ...room, guestIds: isFull ? without : [...without, memberId] };
+          }),
+        },
+      };
+    });
+    setAssigningRoomId(null);
+  };
+
+  const handleRemoveGuest = (roomId: string, memberId: string) => {
+    onUpdateTrip((t) => {
+      if (!t.confirmedAccommodation) return t;
+      return {
+        ...t,
+        confirmedAccommodation: {
+          ...t.confirmedAccommodation,
+          rooms: t.confirmedAccommodation.rooms.map((room) =>
+            room.id === roomId
+              ? { ...room, guestIds: room.guestIds.filter((id) => id !== memberId) }
+              : room
+          ),
+        },
+      };
+    });
   };
 
   const handleResetToPoll = () => {
@@ -141,6 +194,10 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
   if (trip.confirmedAccommodation) {
     const stay = trip.confirmedAccommodation;
     const totalCapacity = stay.rooms.reduce((s, r) => s + r.capacity, 0);
+    const roomed = new Set(stay.rooms.flatMap((r) => r.guestIds));
+    const unroomedMembers = trip.members.filter(
+      (m) => m.status !== 'declined' && !roomed.has(m.id)
+    );
 
     return (
       <div className="pb-16">
@@ -170,6 +227,11 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
           </h2>
           <p className="mt-4 text-body text-mist/70">
             {stay.totalBedrooms} ห้องนอน · {stay.totalBathrooms} ห้องน้ำ · นอนได้ {totalCapacity} คน
+          </p>
+          <p className="mt-2 text-fine text-mist/60">
+            {stay.wifiSsid
+              ? `ไวไฟ ${stay.wifiSsid}${stay.wifiPassword ? ` · รหัส ${stay.wifiPassword}` : ''}`
+              : 'ยังไม่มีใครใส่ชื่อไวไฟ ถึงที่พักแล้วมาเติมได้'}
           </p>
           {stay.mapUrl && (
             <a
@@ -208,18 +270,94 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
                 <div className="mt-3">
                   <Meter value={room.guestIds.length} max={room.capacity} />
                 </div>
-                {room.guestIds.length > 0 && (
-                  <p className="mt-3 text-fine text-stone">
-                    {room.guestIds
-                      .map((id) => trip.members.find((m) => m.id === id)?.nickname)
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </p>
-                )}
+                <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
+                  {room.guestIds.length === 0 && (
+                    <p className="text-fine text-stone">ยังไม่มีใครนอนห้องนี้</p>
+                  )}
+                  {room.guestIds.map((id) => {
+                    const guest = trip.members.find((m) => m.id === id);
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1.5 text-fine text-ink">
+                        <span
+                          className="w-1.5 h-1.5"
+                          style={{ backgroundColor: guest?.avatarColor || '#2f4a3c' }}
+                          aria-hidden="true"
+                        />
+                        {guest?.nickname ?? 'เพื่อน'}
+                        <button
+                          onClick={() => handleRemoveGuest(room.id, id)}
+                          className="text-stone hover:text-ink transition-colors"
+                          aria-label={`ย้าย ${guest?.nickname ?? 'คนนี้'} ออกจาก ${room.roomName}`}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    );
+                  })}
+
+                  {room.guestIds.length < room.capacity && (
+                    <button
+                      onClick={() => setAssigningRoomId(room.id)}
+                      disabled={trip.members.length === 0}
+                      className={`${btnLink} disabled:opacity-40 disabled:pointer-events-none`}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      ใส่คนในห้องนี้
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
+
+          {unroomedMembers.length > 0 && (
+            <p className="mt-6 pt-5 border-t border-mist-deep text-fine text-stone">
+              ยังไม่มีห้องนอน {unroomedMembers.map((m) => m.nickname).join(' · ')}
+            </p>
+          )}
         </Panel>
+
+        {assigningRoomId && (
+          <Modal
+            title="ใครนอนห้องนี้"
+            note="กดชื่อเพื่อย้ายเข้ามา คนที่อยู่ห้องอื่นจะถูกย้ายให้อัตโนมัติ"
+            onClose={() => setAssigningRoomId(null)}
+          >
+            <ul className="divide-y divide-mist-deep max-h-72 overflow-y-auto">
+              {trip.members
+                .filter((m) => m.status !== 'declined')
+                .map((member) => {
+                  const currentRoom = stay.rooms.find((r) => r.guestIds.includes(member.id));
+                  const isHere = currentRoom?.id === assigningRoomId;
+                  return (
+                    <li key={member.id}>
+                      <button
+                        onClick={() => handleAssignGuest(assigningRoomId, member.id)}
+                        disabled={isHere}
+                        className="w-full flex items-center justify-between gap-4 py-3 text-left disabled:opacity-50 group"
+                      >
+                        <span className="inline-flex items-center gap-2.5 text-body text-ink group-hover:text-brass transition-colors">
+                          <span
+                            className="w-1.5 h-1.5"
+                            style={{ backgroundColor: member.avatarColor }}
+                            aria-hidden="true"
+                          />
+                          {member.nickname}
+                        </span>
+                        <span className="text-fine text-stone">
+                          {isHere
+                            ? 'อยู่ห้องนี้แล้ว'
+                            : currentRoom
+                              ? `ย้ายจาก${currentRoom.roomName}`
+                              : 'ยังไม่มีห้อง'}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+            </ul>
+          </Modal>
+        )}
       </div>
     );
   }
@@ -243,23 +381,13 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
         }
       />
 
-      <Panel className="mb-px">
-        <Field
-          label="โหวตในชื่อ"
-          htmlFor="voter-name"
-          hint="ใส่ชื่อเล่นก่อนกดโหวต เพื่อนจะได้รู้ว่าใครเลือกอะไร"
-          className="max-w-xs"
-        >
-          <input
-            id="voter-name"
-            type="text"
-            value={voterName}
-            onChange={(e) => setVoterName(e.target.value)}
-            placeholder="นัท โอม แบงค์"
-            className={input}
-          />
-        </Field>
-      </Panel>
+      {!me && (
+        <Panel className="mb-px">
+          <p className="text-body text-stone">
+            เลือกชื่อคุณที่มุมขวาบนก่อน แล้วจึงจะโหวตได้ เพื่อนจะได้รู้ว่าใครเลือกอะไร
+          </p>
+        </Panel>
+      )}
 
       {trip.accommodationOptions.length === 0 ? (
         <Panel>
@@ -278,7 +406,7 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
         <div className="bg-paper divide-y divide-mist-deep">
           {trip.accommodationOptions.map((option) => {
             const estPerPerson = Math.round(option.pricePerNight / confirmedCount);
-            const isVoted = option.votes.includes(voterName.trim() || 'ฉัน');
+            const isVoted = !!me && option.votes.includes(me.id);
             const isLeading = mostVotes > 0 && option.votes.length === mostVotes;
 
             return (
@@ -338,13 +466,15 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
                   <div className="mt-6 pt-5 border-t border-mist-deep flex flex-wrap items-center gap-x-4 gap-y-3">
                     <button
                       onClick={() => handleVote(option.id)}
+                      disabled={!me}
                       aria-pressed={isVoted}
-                      className={isVoted ? btnBrass : btnQuiet}
+                      title={me ? undefined : 'เลือกชื่อคุณที่มุมขวาบนก่อน'}
+                      className={`${isVoted ? btnBrass : btnQuiet} disabled:opacity-40 disabled:pointer-events-none`}
                     >
                       {isVoted ? `โหวตแล้ว ${option.votes.length}` : `โหวตที่นี่ ${option.votes.length}`}
                     </button>
 
-                    <button onClick={() => handleFinalizeAccommodation(option)} className={btnLink}>
+                    <button onClick={() => setBookingOption(option)} className={btnLink}>
                       เลือกที่นี่เลย
                     </button>
 
@@ -352,7 +482,8 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
 
                     {option.votes.length > 0 && (
                       <p className="text-fine text-stone w-full">
-                        โหวตโดย {option.votes.join(' · ')}
+                        โหวตโดย{' '}
+                        {option.votes.map((v) => voterLabel(trip.members, v)).join(' · ')}
                       </p>
                     )}
                   </div>
@@ -361,6 +492,82 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
             );
           })}
         </div>
+      )}
+
+      {bookingOption && (
+        <Modal
+          title={`เลือก ${bookingOption.name}`}
+          note="กรอกเท่าที่รู้ตอนนี้ ที่เหลือมาเติมทีหลังได้"
+          onClose={() => setBookingOption(null)}
+        >
+          <form onSubmit={handleFinalizeAccommodation} className="space-y-5">
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="เข้าพักได้ตั้งแต่" htmlFor="stay-in">
+                <input
+                  id="stay-in"
+                  type="text"
+                  required
+                  value={checkIn}
+                  onChange={(e) => setCheckIn(e.target.value)}
+                  placeholder="14:00 น."
+                  className={input}
+                />
+              </Field>
+              <Field label="ต้องคืนห้องก่อน" htmlFor="stay-out">
+                <input
+                  id="stay-out"
+                  type="text"
+                  required
+                  value={checkOut}
+                  onChange={(e) => setCheckOut(e.target.value)}
+                  placeholder="11:00 น."
+                  className={input}
+                />
+              </Field>
+            </div>
+
+            <Field
+              label="ชื่อไวไฟ"
+              htmlFor="stay-wifi"
+              hint="ยังไม่รู้ก็เว้นว่างไว้ ค่อยมาใส่ตอนถึงที่พัก"
+            >
+              <input
+                id="stay-wifi"
+                type="text"
+                value={wifiSsid}
+                onChange={(e) => setWifiSsid(e.target.value)}
+                className={input}
+              />
+            </Field>
+
+            <Field label="รหัสไวไฟ" htmlFor="stay-wifi-pass">
+              <input
+                id="stay-wifi-pass"
+                type="text"
+                value={wifiPassword}
+                onChange={(e) => setWifiPassword(e.target.value)}
+                className={input}
+              />
+            </Field>
+
+            <p className="text-fine text-stone">
+              จะสร้างห้องนอนว่างไว้ {bookingOption.bedrooms} ห้อง ให้ไปจับคู่กันในหน้าถัดไป
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setBookingOption(null)}
+                className={`flex-1 ${btnQuiet}`}
+              >
+                ยกเลิก
+              </button>
+              <button type="submit" className={`flex-1 ${btnSolid}`}>
+                ยืนยันที่พักนี้
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
 
       {isNewOptionModalOpen && (

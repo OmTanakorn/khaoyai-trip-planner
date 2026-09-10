@@ -25,3 +25,12 @@ export const btnLink =
   'hover:text-brass transition-colors';
 
 export const baht = (n: number) => `฿${n.toLocaleString('th-TH')}`;
+
+/**
+ * Votes are stored as member ids. Older votes stored a typed-in nickname, so
+ * fall back to showing the raw value rather than dropping the person.
+ */
+export const voterLabel = (
+  members: { id: string; nickname: string }[],
+  token: string
+): string => members.find((m) => m.id === token)?.nickname ?? token;
