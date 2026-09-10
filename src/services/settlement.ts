@@ -1,4 +1,4 @@
-import { Expense, Member } from '../types/trip';
+import { Expense, Member, Payment } from '../types/trip';
 
 export interface Balance {
   memberId: string;
@@ -22,7 +22,8 @@ export interface Transfer {
  */
 export function calculateBalances(
   expenses: Expense[],
-  members: Member[]
+  members: Member[],
+  payments: Payment[] = []
 ): Balance[] {
   const participants = members.filter((m) => m.status !== 'declined');
   const fallback = members.filter((m) => m.status === 'confirmed');
@@ -54,10 +55,23 @@ export function calculateBalances(
     }
   }
 
+  // Settling up moves the debt, it does not change what the trip cost: paying
+  // someone back counts the same as having chipped in that much yourself.
+  const settled = new Map<string, number>();
+  for (const payment of payments) {
+    if (settled.has(payment.fromId) || paid.has(payment.fromId)) {
+      settled.set(payment.fromId, (settled.get(payment.fromId) ?? 0) + payment.amount);
+    }
+    if (settled.has(payment.toId) || paid.has(payment.toId)) {
+      settled.set(payment.toId, (settled.get(payment.toId) ?? 0) - payment.amount);
+    }
+  }
+
   return participants.map((m) => {
     const p = paid.get(m.id) ?? 0;
     const o = owes.get(m.id) ?? 0;
-    return { memberId: m.id, paid: p, owes: o, net: p - o };
+    const s = settled.get(m.id) ?? 0;
+    return { memberId: m.id, paid: p, owes: o, net: p - o + s };
   });
 }
 

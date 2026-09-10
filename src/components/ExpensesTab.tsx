@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Pencil } from 'lucide-react';
-import { TripData, Expense } from '../types/trip';
+import { TripData, Expense, Member, Payment } from '../types/trip';
+import { PromptPayQR } from './PromptPayQR';
+import { SlipField } from './SlipField';
+import { Transfer } from '../services/settlement';
 import { calculateBalances, settleUp } from '../services/settlement';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Meter } from './ui';
@@ -9,6 +12,7 @@ import { input, btnSolid, btnQuiet, btnLink, baht } from './ui-kit';
 interface ExpensesTabProps {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
+  me: Member | null;
 }
 
 const CATEGORY_LABEL: Record<Expense['category'], string> = {
@@ -19,7 +23,7 @@ const CATEGORY_LABEL: Record<Expense['category'], string> = {
   other: 'อื่น ๆ',
 };
 
-export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) => {
+export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip, me }) => {
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
@@ -30,11 +34,15 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
   const [notes, setNotes] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [splitBetween, setSplitBetween] = useState<string[]>([]);
+  const [expenseSlipId, setExpenseSlipId] = useState<string | undefined>();
+  const [payingTransfer, setPayingTransfer] = useState<Transfer | null>(null);
+  const [paySlipId, setPaySlipId] = useState<string | undefined>();
 
 
   const totalExpense = trip.expenses.reduce((sum, e) => sum + e.amount, 0);
 
-  const balances = calculateBalances(trip.expenses, trip.members);
+  const payments = trip.payments ?? [];
+  const balances = calculateBalances(trip.expenses, trip.members, payments);
   // Shares can be uneven now, so this is an average rather than what anyone
   // actually owes. The transfers below are the real answer.
   const averageShare = balances.length
@@ -43,6 +51,46 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
   const transfers = settleUp(balances);
   const nameOf = (id: string) =>
     trip.members.find((m) => m.id === id)?.nickname ?? 'ไม่ระบุ';
+
+  /** PromptPay falls back to the phone number, which is what most people use. */
+  const promptPayOf = (id: string) => {
+    const member = trip.members.find((m) => m.id === id);
+    return member?.promptPayId?.trim() || member?.phone?.trim() || '';
+  };
+
+  const handleRecordPayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payingTransfer) return;
+
+    const payment: Payment = {
+      id: `pay-${Date.now()}`,
+      fromId: payingTransfer.fromId,
+      toId: payingTransfer.toId,
+      amount: payingTransfer.amount,
+      date: new Date().toISOString().split('T')[0],
+      slipId: paySlipId,
+    };
+
+    onUpdateTrip((t) => ({ ...t, payments: [...(t.payments ?? []), payment] }));
+    setPayingTransfer(null);
+    setPaySlipId(undefined);
+  };
+
+  const handleDeletePayment = (paymentId: string) => {
+    const payment = payments.find((p) => p.id === paymentId);
+    if (!payment) return;
+    if (
+      !window.confirm(
+        `ยกเลิกรายการโอน ${nameOf(payment.fromId)} ให้ ${nameOf(payment.toId)}? ยอดจะกลับไปค้างเหมือนเดิม`
+      )
+    ) {
+      return;
+    }
+    onUpdateTrip((t) => ({
+      ...t,
+      payments: (t.payments ?? []).filter((p) => p.id !== paymentId),
+    }));
+  };
 
   const categoryTotals = trip.expenses.reduce(
     (acc, curr) => {
@@ -61,6 +109,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
     setNotes('');
     setDate(new Date().toISOString().split('T')[0]);
     setSplitBetween([]);
+    setExpenseSlipId(undefined);
     setIsExpenseModalOpen(true);
   };
 
@@ -73,6 +122,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
     setNotes(exp.notes || '');
     setDate(exp.date);
     setSplitBetween(exp.splitBetween ?? []);
+    setExpenseSlipId(exp.slipId);
     setIsExpenseModalOpen(true);
   };
 
@@ -85,7 +135,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
         ...t,
         expenses: t.expenses.map((exp) =>
           exp.id === editingExpense.id
-            ? { ...exp, title, amount: Number(amount), payerId, category, notes, date, splitBetween }
+            ? { ...exp, title, amount: Number(amount), payerId, category, notes, date, splitBetween, slipId: expenseSlipId }
             : exp
         ),
       }));
@@ -99,6 +149,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
         splitBetween,
         date,
         notes,
+        slipId: expenseSlipId,
       };
       onUpdateTrip((t) => ({ ...t, expenses: [...t.expenses, newExp] }));
     }
@@ -184,18 +235,81 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
           ) : (
             <ul className="mt-2 divide-y divide-mist-deep">
               {transfers.map((tr, i) => (
-                <li
-                  key={`${tr.fromId}-${tr.toId}-${i}`}
-                  className="py-4 flex items-center justify-between gap-4"
-                >
-                  <span className="text-body text-ink truncate">
-                    {nameOf(tr.fromId)} <span className="text-stone">โอนให้</span>{' '}
-                    {nameOf(tr.toId)}
-                  </span>
-                  <span className="text-body text-ink shrink-0">{baht(tr.amount)}</span>
+                <li key={`${tr.fromId}-${tr.toId}-${i}`} className="py-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-body text-ink truncate">
+                      {nameOf(tr.fromId)} <span className="text-stone">โอนให้</span>{' '}
+                      {nameOf(tr.toId)}
+                    </span>
+                    <span className="text-body text-ink shrink-0">{baht(tr.amount)}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2">
+                    <button
+                      onClick={() => {
+                        setPaySlipId(undefined);
+                        setPayingTransfer(tr);
+                      }}
+                      className={btnLink}
+                    >
+                      {me?.id === tr.fromId ? 'จ่ายเลย' : 'เปิดคิวอาร์ให้'}
+                    </button>
+                    {!promptPayOf(tr.toId) && (
+                      <span className="text-fine text-stone">
+                        {nameOf(tr.toId)} ยังไม่ได้ใส่เลขพร้อมเพย์
+                      </span>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>
+          )}
+
+          {payments.length > 0 && (
+            <div className="mt-8 pt-5 border-t border-mist-deep">
+              <h3 className="text-fine text-stone">โอนแล้ว</h3>
+              <ul className="mt-3 divide-y divide-mist-deep">
+                {payments.map((payment) => (
+                  <li key={payment.id} className="py-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="text-body text-ink truncate">
+                          {nameOf(payment.fromId)}{' '}
+                          <span className="text-stone">โอนให้</span> {nameOf(payment.toId)}
+                        </p>
+                        <p className="mt-0.5 text-fine text-stone">
+                          {baht(payment.amount)} · {payment.date}
+                          {!payment.slipId && ' · ยังไม่มีสลิป'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleDeletePayment(payment.id)}
+                        className="text-stone hover:text-ink transition-colors shrink-0"
+                        aria-label={`ยกเลิกรายการโอนของ ${nameOf(payment.fromId)}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {payment.slipId && (
+                      <div className="mt-3">
+                        <SlipField
+                          tripId={trip.id}
+                          slipId={payment.slipId}
+                          uploadedBy={me?.nickname ?? 'เพื่อนร่วมทริป'}
+                          onChange={(slipId) =>
+                            onUpdateTrip((t) => ({
+                              ...t,
+                              payments: (t.payments ?? []).map((p) =>
+                                p.id === payment.id ? { ...p, slipId } : p
+                              ),
+                            }))
+                          }
+                        />
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {balances.length > 0 && (
@@ -262,6 +376,24 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
                         : 'หารทุกคน'}
                       {exp.notes && ` · ${exp.notes}`}
                     </p>
+                    {exp.slipId && (
+                      <div className="mt-3">
+                        <SlipField
+                          tripId={trip.id}
+                          slipId={exp.slipId}
+                          uploadedBy={me?.nickname ?? 'เพื่อนร่วมทริป'}
+                          label="ใบเสร็จ"
+                          onChange={(slipId) =>
+                            onUpdateTrip((t) => ({
+                              ...t,
+                              expenses: t.expenses.map((x) =>
+                                x.id === exp.id ? { ...x, slipId } : x
+                              ),
+                            }))
+                          }
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-5 shrink-0">
@@ -287,6 +419,54 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
           </ul>
         )}
       </Panel>
+
+      {payingTransfer && (
+        <Modal
+          title={`โอนให้ ${nameOf(payingTransfer.toId)}`}
+          note={`${nameOf(payingTransfer.fromId)} ค้างอยู่ ${baht(payingTransfer.amount)}`}
+          onClose={() => setPayingTransfer(null)}
+        >
+          <form onSubmit={handleRecordPayment} className="space-y-7">
+            {promptPayOf(payingTransfer.toId) ? (
+              <PromptPayQR
+                promptPayId={promptPayOf(payingTransfer.toId)}
+                amount={payingTransfer.amount}
+                payeeName={nameOf(payingTransfer.toId)}
+              />
+            ) : (
+              <p className="text-body text-stone">
+                {nameOf(payingTransfer.toId)} ยังไม่ได้ใส่เลขพร้อมเพย์ ไปเพิ่มได้ที่หน้าเพื่อน
+                แล้วคิวอาร์จะขึ้นตรงนี้ ระหว่างนี้โอนเองแล้วมาแนบสลิปได้
+              </p>
+            )}
+
+            <div className="border-t border-mist-deep pt-6">
+              <p className="text-fine text-stone mb-3">
+                โอนแล้วแนบสลิปไว้เป็นหลักฐาน จะข้ามก็ได้
+              </p>
+              <SlipField
+                tripId={trip.id}
+                slipId={paySlipId}
+                uploadedBy={me?.nickname ?? 'เพื่อนร่วมทริป'}
+                onChange={setPaySlipId}
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPayingTransfer(null)}
+                className={`flex-1 ${btnQuiet}`}
+              >
+                ยังไม่โอน
+              </button>
+              <button type="submit" className={`flex-1 ${btnSolid}`}>
+                โอนแล้ว
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {isExpenseModalOpen && (
         <Modal
@@ -405,6 +585,17 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
                 </p>
               ) : null}
             </fieldset>
+
+            <div className="border-t border-mist-deep pt-5">
+              <p className="text-fine text-stone mb-3">สลิปหรือใบเสร็จ</p>
+              <SlipField
+                tripId={trip.id}
+                slipId={expenseSlipId}
+                uploadedBy={me?.nickname ?? 'เพื่อนร่วมทริป'}
+                label="ใบเสร็จ"
+                onChange={setExpenseSlipId}
+              />
+            </div>
 
             <Field label="หมายเหตุ" htmlFor="exp-notes">
               <input

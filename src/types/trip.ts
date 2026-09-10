@@ -3,6 +3,8 @@ export interface Member {
   name: string;
   nickname: string;
   phone?: string;
+  /** Phone number, national id or e-wallet id. Falls back to `phone`. */
+  promptPayId?: string;
   avatarColor: string;
   status: 'confirmed' | 'maybe' | 'declined';
   role: 'organizer' | 'member';
@@ -109,6 +111,22 @@ export interface Expense {
   splitBetween?: string[];
   date: string;
   notes?: string;
+  /** Receipt or transfer slip kept as proof of what was spent. */
+  slipId?: string;
+}
+
+/**
+ * Money moved between two people to settle up, as opposed to money spent on
+ * the trip. Recording one takes it off the outstanding transfer list.
+ */
+export interface Payment {
+  id: string;
+  fromId: string;
+  toId: string;
+  amount: number;
+  date: string;
+  slipId?: string;
+  note?: string;
 }
 
 export interface PackingItem {
@@ -142,6 +160,7 @@ export interface TripData {
   placeIdeas: PlaceIdea[];
   itinerary: ItineraryDay[];
   expenses: Expense[];
+  payments?: Payment[];
   packingList: PackingItem[];
   announcements: Announcement[];
 }

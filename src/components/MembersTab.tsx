@@ -22,6 +22,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
   const [name, setName] = useState('');
   const [nickname, setNickname] = useState('');
   const [phone, setPhone] = useState('');
+  const [promptPayId, setPromptPayId] = useState('');
   const [status, setStatus] = useState<Member['status']>('confirmed');
   const [role, setRole] = useState<Member['role']>('member');
   const [paidDeposit, setPaidDeposit] = useState(true);
@@ -35,6 +36,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
     setName('');
     setNickname('');
     setPhone('');
+    setPromptPayId('');
     setStatus('confirmed');
     setRole('member');
     setPaidDeposit(true);
@@ -46,6 +48,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
     setName(m.name);
     setNickname(m.nickname);
     setPhone(m.phone || '');
+    setPromptPayId(m.promptPayId || '');
     setStatus(m.status);
     setRole(m.role);
     setPaidDeposit(!!m.paidDeposit);
@@ -61,7 +64,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
         ...t,
         members: t.members.map((m) =>
           m.id === editingMember.id
-            ? { ...m, name, nickname, phone, status, role, paidDeposit }
+            ? { ...m, name, nickname, phone, promptPayId, status, role, paidDeposit }
             : m
         ),
       }));
@@ -71,6 +74,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
         name,
         nickname,
         phone,
+        promptPayId,
         avatarColor: AVATAR_COLORS[trip.members.length % AVATAR_COLORS.length],
         status,
         role,
@@ -188,6 +192,11 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
                     <Tag tone={member.paidDeposit ? 'go' : 'off'}>
                       {member.paidDeposit ? 'โอนมัดจำแล้ว' : 'ยังไม่โอนมัดจำ'}
                     </Tag>
+                    <Tag tone={member.promptPayId || member.phone ? 'go' : 'wait'}>
+                      {member.promptPayId || member.phone
+                        ? 'รับโอนพร้อมเพย์ได้'
+                        : 'ยังไม่มีเลขพร้อมเพย์'}
+                    </Tag>
                   </div>
 
                   <p className="mt-2 text-fine text-stone">
@@ -259,16 +268,32 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
               </Field>
             </div>
 
-            <Field label="เบอร์โทร" htmlFor="mem-phone">
-              <input
-                id="mem-phone"
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="081-234-5678"
-                className={input}
-              />
-            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="เบอร์โทร" htmlFor="mem-phone">
+                <input
+                  id="mem-phone"
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="081-234-5678"
+                  className={input}
+                />
+              </Field>
+              <Field
+                label="พร้อมเพย์"
+                htmlFor="mem-promptpay"
+                hint="เว้นว่างได้ จะใช้เบอร์โทรแทน"
+              >
+                <input
+                  id="mem-promptpay"
+                  type="tel"
+                  value={promptPayId}
+                  onChange={(e) => setPromptPayId(e.target.value)}
+                  placeholder="เบอร์ 10 หลัก หรือบัตร 13 หลัก"
+                  className={input}
+                />
+              </Field>
+            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <Field label="ไปไหม" htmlFor="mem-status">

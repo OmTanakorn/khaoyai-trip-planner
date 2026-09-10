@@ -131,6 +131,11 @@ function initFirebase(): Firestore | null {
   }
 }
 
+/** The live Firestore handle, or null when the trip is device-only. */
+export function getDb(): Firestore | null {
+  return initFirebase();
+}
+
 // Local Storage helpers
 export function loadLocalTripData(): TripData {
   try {

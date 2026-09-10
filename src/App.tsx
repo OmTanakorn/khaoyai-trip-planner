@@ -128,6 +128,7 @@ export function App() {
           <ExpensesTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
+            me={me}
           />
         )}
 

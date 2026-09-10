@@ -29,6 +29,7 @@ export const initialTripData: TripData = {
     }
   ],
   expenses: [],
+  payments: [],
   packingList: [],
   announcements: [
     {
