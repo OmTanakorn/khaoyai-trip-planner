@@ -1,21 +1,5 @@
 import React, { useState } from 'react';
-import { 
-  Users, 
-  Car, 
-  Home, 
-  MapPin, 
-  Calendar, 
-  Megaphone, 
-  Plus, 
-  Send, 
-  Wind,
-  CheckCircle2,
-  Clock,
-  ThumbsUp,
-  Sparkles,
-  ArrowRight,
-  UserPlus
-} from 'lucide-react';
+import { Plus, Send, ArrowRight } from 'lucide-react';
 import { TripData, Member } from '../types/trip';
 
 interface OverviewTabProps {
@@ -44,12 +28,10 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
 
   // Statistics
   const confirmedMembers = trip.members.filter((m) => m.status === 'confirmed');
-  const maybeMembers = trip.members.filter((m) => m.status === 'maybe');
 
   const totalCarSeats = trip.cars.reduce((sum, car) => sum + car.maxSeats, 0);
-  const totalAssignedCarSeats = trip.cars.reduce((sum, car) => sum + car.passengerIds.length, 0);
 
-  // Countdown to Oct 31, 2026
+  // Countdown to the departure date
   const calculateDaysLeft = () => {
     const today = new Date();
     const tripDate = new Date(trip.startDate);
@@ -87,8 +69,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     if (!quickNickname.trim()) return;
 
     const colorPalette = [
-      '#10b981', '#3b82f6', '#ec4899', '#8b5cf6', '#f59e0b', 
-      '#06b6d4', '#ef4444', '#84cc16', '#f43f5e', '#6366f1'
+      '#2f4a3c', '#a88d4f', '#6e7a72', '#1b2e27', '#c7ac72',
+      '#4a6b57', '#8c7340', '#3d5a4a', '#b09a6a', '#55665c'
     ];
     const randomColor = colorPalette[trip.members.length % colorPalette.length];
 
@@ -129,397 +111,350 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     setShowQuickRsvp(false);
   };
 
+  const milestones = [
+    {
+      tab: 'members',
+      step: 'หนึ่ง',
+      title: 'รวมพลเพื่อน',
+      value: `${confirmedMembers.length}`,
+      unit: 'จาก 10–12 คน',
+      note:
+        confirmedMembers.length >= 10
+          ? 'ครบแก๊งแล้ว'
+          : `ยังขาดอีกอย่างน้อย ${Math.max(0, 10 - confirmedMembers.length)} คน`,
+    },
+    {
+      tab: 'cars',
+      step: 'สอง',
+      title: 'สำรวจรถ',
+      value: `${trip.cars.length}`,
+      unit: 'คัน',
+      note:
+        trip.cars.length === 0
+          ? 'ยังไม่มีใครอาสาขับ'
+          : `นั่งได้รวม ${totalCarSeats} คน`,
+    },
+    {
+      tab: 'stay',
+      step: 'สาม',
+      title: 'โหวตที่พัก',
+      value: `${trip.accommodationOptions.length}`,
+      unit: 'ตัวเลือก',
+      note: trip.confirmedAccommodation ? 'จองแล้ว' : 'ยังเปิดรับข้อเสนอ',
+    },
+    {
+      tab: 'itinerary',
+      step: 'สี่',
+      title: 'ปักหมุดที่เที่ยว',
+      value: `${trip.placeIdeas.length}`,
+      unit: 'จุดแวะ',
+      note: 'คาเฟ่และร้านอาหาร',
+    },
+  ];
+
+  const nextSteps = [
+    {
+      tab: 'stay',
+      title: 'เสนอตัวเลือกที่พัก',
+      detail: 'พูลวิลล่าสี่ถึงห้าห้องนอน รองรับ 10–12 คน',
+    },
+    {
+      tab: 'cars',
+      title: 'รวบรวมรถเดินทาง',
+      detail: 'ต้องการสองถึงสามคันจึงจะพอกับทั้งกลุ่ม',
+    },
+    {
+      tab: 'itinerary',
+      title: 'ปักหมุดคาเฟ่และร้านอาหาร',
+      detail: 'เสนอจุดแวะระหว่างทาง แล้วโหวตกัน',
+    },
+  ];
+
   return (
-    <div className="space-y-6 pb-12">
-      {/* Hero Banner */}
-      <div className="relative rounded-3xl overflow-hidden shadow-xl border border-emerald-900/10">
-        <div 
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url(${trip.coverImage})` }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/95 via-emerald-900/70 to-black/35" />
-        </div>
+    <div className="pb-16">
+      {/* ── Hero ─────────────────────────────────────────────── */}
+      <section className="relative overflow-hidden bg-ink">
+        <img
+          src={trip.coverImage}
+          alt="ช้างป่าเดินข้ามถนนในเขาใหญ่ รถจอดรอให้ผ่าน"
+          className="absolute inset-0 w-full h-full object-cover opacity-70"
+        />
+        {/* Dark at the type, clear through the middle so the elephant reads. */}
+        <div className="absolute inset-0 bg-gradient-to-b from-ink via-ink/25 to-ink" />
 
-        <div className="relative p-6 sm:p-10 text-white flex flex-col justify-between min-h-[340px]">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/30 backdrop-blur-md border border-emerald-300/40 text-emerald-200">
-                <MapPin className="w-3.5 h-3.5" />
-                {trip.destination}
+        <div className="relative px-6 sm:px-10 pt-14 sm:pt-24 pb-8 sm:pb-10 min-h-[30rem] sm:min-h-[34rem] flex flex-col">
+          <p className="text-fine text-brass-lit">{trip.destination}</p>
+
+          <h1 className="mt-4 font-display text-title sm:text-display font-normal text-paper max-w-2xl">
+            {trip.title}
+          </h1>
+
+          <p className="mt-5 text-body text-mist/80 max-w-lg">{trip.tagline}</p>
+
+          <div className="mt-auto pt-6 flex flex-wrap items-end gap-x-10 gap-y-6 border-t border-paper/15">
+            <div>
+              <span className="font-display text-display sm:text-[4rem] leading-none text-brass-lit">
+                {daysLeft > 0 ? daysLeft : 0}
               </span>
-              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold bg-amber-400/30 backdrop-blur-md border border-amber-300/40 text-amber-200">
-                📌 กำลังเปิดโหวต & วางแผน
+              <span className="ml-2 text-body text-mist/70">
+                {daysLeft > 0 ? 'วันก่อนออกเดินทาง' : 'ถึงวันเดินทางแล้ว'}
               </span>
             </div>
 
-            {/* Countdown Badge */}
-            <div className="bg-white/15 backdrop-blur-md border border-white/25 rounded-2xl px-4 py-2 text-center shadow-lg">
-              <div className="text-xl sm:text-2xl font-black text-amber-300">
-                {daysLeft > 0 ? `อีก ${daysLeft} วัน` : 'ถึงวันเดินทางแล้ว! 🎉'}
-              </div>
-              <div className="text-[11px] text-emerald-100 font-medium">
-                31 ต.ค. - 1 พ.ย. 2569 (2 วัน 1 คืน)
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-8">
-            <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight drop-shadow-md text-white">
-              {trip.title}
-            </h2>
-            <p className="mt-2 text-emerald-100/90 text-sm sm:text-base max-w-2xl leading-relaxed">
-              {trip.tagline}
-            </p>
-          </div>
-
-          {/* Quick status info */}
-          <div className="mt-6 pt-4 border-t border-white/15 flex flex-wrap items-center justify-between gap-4 text-xs text-emerald-100">
-            <div className="flex items-center gap-2">
-              <Wind className="w-4 h-4 text-teal-300" />
-              <span>ช่วงปลายฝนต้นหนาว ลมเย็น สูดโอโซน & ตี้หมูกระทะพูลวิลล่า</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-              <span>เป้าหมายกลุ่ม: 10 - 12 คน (คอนเฟิร์มแล้ว {confirmedMembers.length} คน)</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Planning Checklist Banner */}
-      <div className="bg-gradient-to-r from-emerald-800 to-teal-900 rounded-3xl p-6 text-white shadow-md">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-amber-300" />
-              <h3 className="text-base sm:text-lg font-bold">ขั้นตอนวางแผนทริป (Trip Checklist)</h3>
-            </div>
-            <p className="text-xs text-emerald-100/80">
-              สถานะตอนนี้: กำลังเริ่มทริป เช็คจำนวนเพื่อน อาสาสมัครคนขับรถ และหาตัวเลือกที่พักพูลวิลล่า
-            </p>
-          </div>
-
-          <button
-            onClick={() => setShowQuickRsvp(true)}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-900 rounded-2xl text-xs sm:text-sm font-bold shadow-md transition-all shrink-0"
-          >
-            <UserPlus className="w-4 h-4" />
-            <span>+ ลงชื่อร่วมทริปด่วน (RSVP)</span>
-          </button>
-        </div>
-
-        {/* 4 Planning Milestones */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
-          {/* Step 1: Members */}
-          <div 
-            onClick={() => setActiveTab('members')}
-            className="p-3.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 cursor-pointer transition-all"
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-semibold text-emerald-200">1. รวมพลเพื่อน</span>
-              <Users className="w-4 h-4 text-emerald-300" />
-            </div>
-            <div className="text-lg font-bold">
-              {confirmedMembers.length} <span className="text-xs font-normal text-emerald-200">/ 10-12 คน</span>
-            </div>
-            <span className="text-[11px] text-emerald-200/80 block mt-1">
-              {confirmedMembers.length >= 10 ? 'ครบแก๊งแล้ว ✓' : `ขาดอีกอย่างน้อย ${Math.max(0, 10 - confirmedMembers.length)} คน`}
-            </span>
-          </div>
-
-          {/* Step 2: Cars */}
-          <div 
-            onClick={() => setActiveTab('cars')}
-            className="p-3.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 cursor-pointer transition-all"
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-semibold text-emerald-200">2. สำรวจรถเดินทาง</span>
-              <Car className="w-4 h-4 text-emerald-300" />
-            </div>
-            <div className="text-lg font-bold">
-              {trip.cars.length} คัน <span className="text-xs font-normal text-emerald-200">({totalCarSeats} ที่นั่ง)</span>
-            </div>
-            <span className="text-[11px] text-amber-300 block mt-1">
-              {trip.cars.length === 0 ? 'ยังไม่มีรถ (เปิดรับอาสา)' : `รองรับได้ ${totalCarSeats} คน`}
-            </span>
-          </div>
-
-          {/* Step 3: Stay */}
-          <div 
-            onClick={() => setActiveTab('stay')}
-            className="p-3.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 cursor-pointer transition-all"
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-semibold text-emerald-200">3. โหวตที่พัก</span>
-              <Home className="w-4 h-4 text-emerald-300" />
-            </div>
-            <div className="text-lg font-bold">
-              {trip.accommodationOptions.length} ตัวเลือก
-            </div>
-            <span className="text-[11px] text-amber-300 block mt-1">
-              {trip.confirmedAccommodation ? 'จองที่พักแล้ว ✓' : 'กำลังเปิดรับตัวเลือก'}
-            </span>
-          </div>
-
-          {/* Step 4: Spots Wishlist */}
-          <div 
-            onClick={() => setActiveTab('itinerary')}
-            className="p-3.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 cursor-pointer transition-all"
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-semibold text-emerald-200">4. ปักหมุดที่เที่ยว</span>
-              <Calendar className="w-4 h-4 text-emerald-300" />
-            </div>
-            <div className="text-lg font-bold">
-              {trip.placeIdeas.length} จุดแวะ
-            </div>
-            <span className="text-[11px] text-emerald-200/80 block mt-1">
-              เสนอคาเฟ่ & ร้านอาหาร
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick RSVP Modal */}
-      {showQuickRsvp && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl space-y-4">
-            <h3 className="text-lg font-bold text-slate-800">ลงชื่อร่วมทริปเขาใหญ่ 🌿</h3>
-            <p className="text-xs text-slate-500">
-              วันที่ 31 ต.ค. - 1 พ.ย. 2569 (เสาร์-อาทิตย์ 2 วัน 1 คืน)
+            <p className="text-fine text-mist/70 leading-relaxed">
+              คอนเฟิร์มแล้ว {confirmedMembers.length} คน
+              <br />
+              ปลายฝนต้นหนาว ช่วงเย็นขับช้า ๆ ช้างข้ามถนนบ่อย
             </p>
 
-            <form onSubmit={handleQuickRsvp} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">ชื่อเล่น *</label>
+            <button
+              onClick={() => setShowQuickRsvp(true)}
+              className="ml-auto px-6 py-3 bg-brass hover:bg-brass-lit text-ink text-body rounded-ctl transition-colors"
+            >
+              ลงชื่อร่วมทริป
+            </button>
+          </div>
+        </div>
+
+        {/* Milestones read as one band attached to the hero, not four cards */}
+        <div className="relative grid grid-cols-2 lg:grid-cols-4 border-t border-paper/15">
+          {milestones.map((m, i) => (
+            <button
+              key={m.tab}
+              onClick={() => setActiveTab(m.tab)}
+              className={`text-left px-6 sm:px-8 py-6 hover:bg-paper/5 transition-colors border-paper/15 ${
+                i % 2 === 0 ? 'border-r' : ''
+              } lg:border-r lg:last:border-r-0 ${i < 2 ? 'border-b lg:border-b-0' : ''}`}
+            >
+              <p className="text-fine text-brass-lit">ขั้นที่{m.step}</p>
+              <p className="mt-1 text-body text-mist/80">{m.title}</p>
+              <p className="mt-3 font-display text-title text-paper leading-none">
+                {m.value}
+                <span className="ml-2 font-sans text-fine text-mist/60">{m.unit}</span>
+              </p>
+              <p className="mt-2 text-fine text-mist/55">{m.note}</p>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Board & next steps ───────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-px bg-mist-deep mt-px">
+        <section className="lg:col-span-2 bg-paper px-6 sm:px-8 py-8">
+          <div className="flex items-start justify-between gap-4 border-b border-mist-deep pb-5">
+            <div>
+              <h2 className="font-display text-lead text-ink">บอร์ดพูดคุย</h2>
+              <p className="mt-1 text-fine text-stone">
+                แจ้งข่าว นัดหมาย หรือความคืบหน้าของทริป
+              </p>
+            </div>
+            <button
+              onClick={() => setShowAnnounceForm(!showAnnounceForm)}
+              className="flex items-center gap-1.5 shrink-0 text-fine text-ink border-b border-brass pb-0.5 hover:text-brass transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              โพสต์ข้อความ
+            </button>
+          </div>
+
+          {showAnnounceForm && (
+            <form onSubmit={handleAddAnnouncement} className="mt-5 space-y-3">
+              <textarea
+                value={newAnnouncement}
+                onChange={(e) => setNewAnnouncement(e.target.value)}
+                placeholder="พิมพ์ข้อความถึงเพื่อน ๆ เช่น ใครมีพูลวิลล่าแนะนำ แปะไว้ในแถบที่พักได้เลย"
+                rows={3}
+                className="w-full text-body p-3 rounded-ctl border border-mist-deep bg-mist/40 focus:outline-none focus:border-brass"
+              />
+              <div className="flex items-center justify-between gap-3">
                 <input
+                  type="text"
+                  value={announcementAuthor}
+                  onChange={(e) => setAnnouncementAuthor(e.target.value)}
+                  placeholder="ชื่อผู้โพสต์"
+                  className="text-fine py-2 px-3 bg-mist/40 border border-mist-deep rounded-ctl w-40 focus:outline-none focus:border-brass"
+                />
+                <button
+                  type="submit"
+                  disabled={!newAnnouncement.trim()}
+                  className="flex items-center gap-2 px-5 py-2 text-fine text-paper bg-ink hover:bg-moss disabled:opacity-40 rounded-ctl transition-colors"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  โพสต์
+                </button>
+              </div>
+            </form>
+          )}
+
+          {trip.announcements.length === 0 ? (
+            <p className="mt-8 text-body text-stone">
+              ยังไม่มีใครโพสต์ เริ่มจากบอกเพื่อน ๆ ว่าอยากไปไหนก่อนก็ได้
+            </p>
+          ) : (
+            <ul className="mt-6 divide-y divide-mist-deep">
+              {trip.announcements.map((item) => (
+                <li key={item.id} className="py-5 first:pt-0">
+                  <p className="text-body text-ink">{item.text}</p>
+                  <p className="mt-2 text-fine text-stone">
+                    {item.author} · {item.date}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="bg-paper px-6 sm:px-8 py-8">
+          <h2 className="font-display text-lead text-ink border-b border-mist-deep pb-5">
+            สิ่งที่ต้องทำต่อไป
+          </h2>
+
+          <ol className="divide-y divide-mist-deep">
+            {nextSteps.map((step, i) => (
+              <li key={step.tab}>
+                <button
+                  onClick={() => setActiveTab(step.tab)}
+                  className="group w-full text-left py-5 flex items-start gap-4"
+                >
+                  <span className="font-display text-lead text-brass leading-none pt-0.5">
+                    {i + 1}
+                  </span>
+                  <span className="flex-1">
+                    <span className="block text-body text-ink group-hover:text-brass transition-colors">
+                      {step.title}
+                    </span>
+                    <span className="block mt-1 text-fine text-stone">{step.detail}</span>
+                  </span>
+                  <ArrowRight className="w-4 h-4 mt-1 text-mist-deep group-hover:text-brass transition-colors" />
+                </button>
+              </li>
+            ))}
+          </ol>
+        </section>
+      </div>
+
+      {/* ── Quick RSVP ───────────────────────────────────────── */}
+      {showQuickRsvp && (
+        <div className="fixed inset-0 z-50 bg-ink/70 flex items-center justify-center p-4">
+          <div className="bg-paper rounded-ctl max-w-md w-full px-6 sm:px-8 py-8 max-h-[90vh] overflow-y-auto">
+            <h2 className="font-display text-lead text-ink">ลงชื่อร่วมทริป</h2>
+            <p className="mt-1 text-fine text-stone">
+              31 ต.ค. — 1 พ.ย. 2569 เสาร์ถึงอาทิตย์ สองวันหนึ่งคืน
+            </p>
+
+            <form onSubmit={handleQuickRsvp} className="mt-6 space-y-5 text-body">
+              <div>
+                <label htmlFor="rsvp-nickname" className="block text-fine text-stone mb-1.5">
+                  ชื่อเล่น
+                </label>
+                <input
+                  id="rsvp-nickname"
                   type="text"
                   required
                   value={quickNickname}
                   onChange={(e) => setQuickNickname(e.target.value)}
-                  placeholder="เช่น นัท, แบงค์, โอม"
-                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  placeholder="นัท แบงค์ โอม"
+                  className="w-full p-2.5 rounded-ctl border border-mist-deep bg-mist/40 focus:outline-none focus:border-brass"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">ชื่อจริง (ถ้ามี)</label>
+                <label htmlFor="rsvp-name" className="block text-fine text-stone mb-1.5">
+                  ชื่อจริง ถ้าอยากใส่
+                </label>
                 <input
+                  id="rsvp-name"
                   type="text"
                   value={quickName}
                   onChange={(e) => setQuickName(e.target.value)}
-                  placeholder="เช่น ณัฐชา"
-                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  placeholder="ณัฐชา"
+                  className="w-full p-2.5 rounded-ctl border border-mist-deep bg-mist/40 focus:outline-none focus:border-brass"
                 />
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">สถานะการไป *</label>
+                <label htmlFor="rsvp-status" className="block text-fine text-stone mb-1.5">
+                  ไปไหม
+                </label>
                 <select
+                  id="rsvp-status"
                   value={quickStatus}
                   onChange={(e) => setQuickStatus(e.target.value as Member['status'])}
-                  className="w-full p-2.5 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className="w-full p-2.5 rounded-ctl border border-mist-deep bg-mist/40 focus:outline-none focus:border-brass"
                 >
-                  <option value="confirmed">ไปแน่นอน (Confirmed) ✓</option>
-                  <option value="maybe">รอดูก่อน (Maybe)</option>
-                  <option value="declined">ติดธุระ (Declined)</option>
+                  <option value="confirmed">ไปแน่นอน</option>
+                  <option value="maybe">ขอดูก่อน</option>
+                  <option value="declined">ติดธุระ ไปไม่ได้</option>
                 </select>
               </div>
 
-              {/* Car Volunteer checkbox */}
-              <div className="p-3 rounded-2xl bg-blue-50/70 border border-blue-100 space-y-2">
-                <div className="flex items-center gap-2">
+              <div className="border-t border-mist-deep pt-5 space-y-3">
+                <div className="flex items-center gap-2.5">
                   <input
                     type="checkbox"
                     id="hasCar"
                     checked={quickHasCar}
                     onChange={(e) => setQuickHasCar(e.target.checked)}
-                    className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500"
+                    className="w-4 h-4 accent-brass"
                   />
-                  <label htmlFor="hasCar" className="font-bold text-blue-900 cursor-pointer">
-                    🚗 ฉันสามารถเอารถไปได้ (อาสาเป็นคนขับ)
+                  <label htmlFor="hasCar" className="text-body text-ink cursor-pointer">
+                    เอารถไปได้ อาสาเป็นคนขับ
                   </label>
                 </div>
 
                 {quickHasCar && (
-                  <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[11px] font-semibold text-blue-800 mb-1">รุ่นรถ</label>
+                      <label htmlFor="rsvp-car" className="block text-fine text-stone mb-1.5">
+                        รุ่นรถ
+                      </label>
                       <input
+                        id="rsvp-car"
                         type="text"
                         required={quickHasCar}
                         value={quickCarModel}
                         onChange={(e) => setQuickCarModel(e.target.value)}
-                        placeholder="เช่น CR-V, Civic, Yaris"
-                        className="w-full p-2 text-xs rounded-lg border border-blue-200 bg-white"
+                        placeholder="CR-V, Civic, Yaris"
+                        className="w-full p-2.5 text-fine rounded-ctl border border-mist-deep bg-mist/40 focus:outline-none focus:border-brass"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-semibold text-blue-800 mb-1">จำนวนที่นั่งรวม</label>
+                      <label htmlFor="rsvp-seats" className="block text-fine text-stone mb-1.5">
+                        นั่งได้กี่คน
+                      </label>
                       <input
+                        id="rsvp-seats"
                         type="number"
                         min={1}
                         max={10}
                         value={quickCarSeats}
                         onChange={(e) => setQuickCarSeats(Number(e.target.value))}
-                        className="w-full p-2 text-xs rounded-lg border border-blue-200 bg-white"
+                        className="w-full p-2.5 text-fine rounded-ctl border border-mist-deep bg-mist/40 focus:outline-none focus:border-brass"
                       />
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="pt-2 flex gap-2">
+              <div className="flex gap-3 pt-1">
                 <button
                   type="button"
                   onClick={() => setShowQuickRsvp(false)}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors"
+                  className="flex-1 py-2.5 text-body text-stone border border-mist-deep hover:text-ink rounded-ctl transition-colors"
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold shadow-xs transition-colors"
+                  className="flex-1 py-2.5 text-body text-paper bg-ink hover:bg-moss rounded-ctl transition-colors"
                 >
-                  ยืนยันลงชื่อ
+                  ลงชื่อ
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
-
-      {/* Grid: Announcements & Quick Action Cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Left 2 Cols: Announcements */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs">
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
-                  <Megaphone className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-800">บอร์ดพูดคุย & ประชาสัมพันธ์</h3>
-                  <p className="text-xs text-slate-500">แจ้งข่าวสาร นัดหมาย หรือความคืบหน้าของทริป</p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setShowAnnounceForm(!showAnnounceForm)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span>โพสต์ข้อความ</span>
-              </button>
-            </div>
-
-            {showAnnounceForm && (
-              <form onSubmit={handleAddAnnouncement} className="mb-5 p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                <textarea
-                  value={newAnnouncement}
-                  onChange={(e) => setNewAnnouncement(e.target.value)}
-                  placeholder="พิมพ์ข้อความแจ้งเพื่อนๆ เช่น 'ใครมีพูลวิลล่าแนะนำ แปะในแถบที่พักได้เลยนะ'..."
-                  rows={2}
-                  className="w-full text-xs p-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
-                />
-                <div className="flex items-center justify-between">
-                  <input
-                    type="text"
-                    value={announcementAuthor}
-                    onChange={(e) => setAnnouncementAuthor(e.target.value)}
-                    placeholder="ชื่อผู้โพสต์"
-                    className="text-xs py-1.5 px-3 bg-white border border-slate-200 rounded-lg text-slate-700 w-36"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!newAnnouncement.trim()}
-                    className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-xl"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                    โพสต์
-                  </button>
-                </div>
-              </form>
-            )}
-
-            <div className="space-y-3">
-              {trip.announcements.map((item) => (
-                <div key={item.id} className="p-4 rounded-2xl bg-amber-50/50 border border-amber-100 flex items-start gap-3">
-                  <div className="w-2 h-2 rounded-full bg-amber-400 mt-2 shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-xs sm:text-sm text-slate-800 font-medium leading-relaxed">{item.text}</p>
-                    <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-400">
-                      <span className="font-semibold text-emerald-700">{item.author}</span>
-                      <span>•</span>
-                      <span>{item.date}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Col: Quick Next Steps */}
-        <div className="space-y-4">
-          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-4">
-            <h3 className="text-base font-bold text-slate-800">📌 สิ่งที่ต้องทำต่อไป</h3>
-            
-            <div className="space-y-3 text-xs">
-              <div 
-                onClick={() => setActiveTab('stay')}
-                className="p-3.5 rounded-2xl bg-slate-50 hover:bg-emerald-50/60 border border-slate-100 hover:border-emerald-200 transition-all cursor-pointer flex items-center justify-between group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold">
-                    1
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-800 group-hover:text-emerald-800">ช่วยกันเสนอตัวเลือกที่พัก</h4>
-                    <p className="text-[11px] text-slate-500">พูลวิลล่า 4-5 ห้องนอน รองรับ 10-12 คน</p>
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-transform group-hover:translate-x-0.5" />
-              </div>
-
-              <div 
-                onClick={() => setActiveTab('cars')}
-                className="p-3.5 rounded-2xl bg-slate-50 hover:bg-blue-50/60 border border-slate-100 hover:border-blue-200 transition-all cursor-pointer flex items-center justify-between group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center font-bold">
-                    2
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-800 group-hover:text-blue-800">รวบรวมรถเดินทาง</h4>
-                    <p className="text-[11px] text-slate-500">ต้องการประมาณ 2-3 คัน เพื่อให้พอกับ 10-12 คน</p>
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 transition-transform group-hover:translate-x-0.5" />
-              </div>
-
-              <div 
-                onClick={() => setActiveTab('itinerary')}
-                className="p-3.5 rounded-2xl bg-slate-50 hover:bg-purple-50/60 border border-slate-100 hover:border-purple-200 transition-all cursor-pointer flex items-center justify-between group"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center font-bold">
-                    3
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-800 group-hover:text-purple-800">ปักหมุดคาเฟ่ / ร้านอาหาร</h4>
-                    <p className="text-[11px] text-slate-500">เสนอจุดแวะและโหวตจุดที่อยากไป</p>
-                  </div>
-                </div>
-                <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-purple-600 transition-transform group-hover:translate-x-0.5" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
     </div>
   );
 };

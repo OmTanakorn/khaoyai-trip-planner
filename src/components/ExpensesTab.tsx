@@ -1,29 +1,26 @@
 import React, { useState } from 'react';
-import { 
-  Receipt, 
-  Plus, 
-  DollarSign, 
-  Users, 
-  Trash2, 
-  Edit3, 
-  X, 
-  ArrowRight,
-  PieChart,
-  CheckCircle,
-  HelpCircle
-} from 'lucide-react';
-import { TripData, Expense, Member } from '../types/trip';
+import { Plus, Trash2, Pencil } from 'lucide-react';
+import { TripData, Expense } from '../types/trip';
+import { PageHead, Panel, Modal, Field, Empty, Meter } from './ui';
+import { input, btnSolid, btnQuiet, btnLink, baht } from './ui-kit';
 
 interface ExpensesTabProps {
   trip: TripData;
   onUpdateTrip: (trip: TripData) => void;
 }
 
+const CATEGORY_LABEL: Record<Expense['category'], string> = {
+  accommodation: 'ที่พัก',
+  food: 'อาหารและเครื่องดื่ม',
+  fuel: 'น้ำมันและทางด่วน',
+  tickets: 'ค่าเข้าและบัตรกิจกรรม',
+  other: 'อื่น ๆ',
+};
+
 export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) => {
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
-  // Form states
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState<number | ''>('');
   const [payerId, setPayerId] = useState(trip.members[0]?.id || '');
@@ -34,17 +31,17 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
   const confirmedMembers = trip.members.filter((m) => m.status === 'confirmed');
   const memberCount = confirmedMembers.length || 1;
 
-  // Calculations
   const totalExpense = trip.expenses.reduce((sum, e) => sum + e.amount, 0);
   const perPerson = Math.round(totalExpense / memberCount);
 
-  // Category totals
-  const categoryTotals = trip.expenses.reduce((acc, curr) => {
-    acc[curr.category] = (acc[curr.category] || 0) + curr.amount;
-    return acc;
-  }, {} as Record<string, number>);
+  const categoryTotals = trip.expenses.reduce(
+    (acc, curr) => {
+      acc[curr.category] = (acc[curr.category] || 0) + curr.amount;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
 
-  // Spending per member
   const memberPaidMap: Record<string, number> = {};
   trip.members.forEach((m) => {
     memberPaidMap[m.id] = 0;
@@ -52,16 +49,6 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
   trip.expenses.forEach((e) => {
     memberPaidMap[e.payerId] = (memberPaidMap[e.payerId] || 0) + e.amount;
   });
-
-  const getCategoryLabel = (cat: Expense['category']) => {
-    switch (cat) {
-      case 'accommodation': return '🏡 ที่พัก';
-      case 'food': return '🍲 อาหาร/เครื่องดื่ม';
-      case 'fuel': return '⛽ น้ำมัน/ทางด่วน';
-      case 'tickets': return '🎟️ ค่าเข้า/ตั๋ว';
-      default: return '📦 อื่นๆ';
-    }
-  };
 
   const handleOpenNewModal = () => {
     setEditingExpense(null);
@@ -92,15 +79,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
     if (editingExpense) {
       const updatedExpenses = trip.expenses.map((exp) =>
         exp.id === editingExpense.id
-          ? {
-              ...exp,
-              title,
-              amount: Number(amount),
-              payerId,
-              category,
-              notes,
-              date,
-            }
+          ? { ...exp, title, amount: Number(amount), payerId, category, notes, date }
           : exp
       );
       onUpdateTrip({ ...trip, expenses: updatedExpenses });
@@ -121,293 +100,270 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
   };
 
   const handleDeleteExpense = (expenseId: string) => {
-    if (window.confirm('คุณต้องการลบรายการค่าใช้จ่ายนี้ใช่หรือไม่?')) {
-      const updatedExpenses = trip.expenses.filter((e) => e.id !== expenseId);
-      onUpdateTrip({ ...trip, expenses: updatedExpenses });
-    }
+    const exp = trip.expenses.find((e) => e.id === expenseId);
+    if (!window.confirm(`ลบรายการ ${exp?.title ?? 'นี้'} ออกจากบัญชี?`)) return;
+    onUpdateTrip({ ...trip, expenses: trip.expenses.filter((e) => e.id !== expenseId) });
   };
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Header & Quick Action */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-slate-800">งบประมาณ & ระบบหารเงิน (Expenses & Split)</h2>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            บันทึกยอดเงินกองกลาง ค่าที่พัก ของสด ค่าน้ำมัน และคำนวณเงินโอนเคลียร์หนี้อัตโนมัติ
-          </p>
-        </div>
+    <div className="pb-16">
+      <PageHead
+        title="งบและการหารเงิน"
+        note="บันทึกทุกยอดที่มีคนสำรองจ่ายไปก่อน แล้วดูว่าท้ายทริปใครต้องโอนให้ใคร"
+        action={
+          <button onClick={handleOpenNewModal} className={btnSolid}>
+            บันทึกค่าใช้จ่าย
+          </button>
+        }
+      />
 
-        <button
-          onClick={handleOpenNewModal}
-          className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl text-xs sm:text-sm font-semibold shadow-xs transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ บันทึกค่าใช้จ่าย</span>
-        </button>
+      {/* The one loud element on this page: the running total. */}
+      <div className="bg-ink px-6 sm:px-8 py-10 mb-px">
+        <p className="text-fine text-brass-lit">ใช้ไปแล้วทั้งทริป</p>
+        <p className="mt-3 font-display text-display sm:text-[4rem] leading-none text-paper">
+          {baht(totalExpense)}
+        </p>
+        <p className="mt-4 text-body text-mist/70">
+          หารกัน {memberCount} คน ตกคนละ {baht(perPerson)} · บันทึกไว้ {trip.expenses.length} รายการ
+        </p>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-gradient-to-br from-purple-700 to-indigo-800 text-white p-6 rounded-3xl shadow-md shadow-purple-200">
-          <span className="text-xs font-semibold text-purple-200 block mb-1">ยอดรวมค่าใช้จ่ายทั้งหมด</span>
-          <div className="text-3xl font-black">฿{totalExpense.toLocaleString()}</div>
-          <p className="text-xs text-purple-200 mt-2">
-            บันทึกแล้ว {trip.expenses.length} รายการ
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-mist-deep">
+        <Panel>
+          <h2 className="font-display text-lead text-ink border-b border-mist-deep pb-5">
+            เงินหมดไปกับอะไร
+          </h2>
+          {Object.keys(categoryTotals).length === 0 ? (
+            <p className="mt-6 text-body text-stone">ยังไม่มีรายการ ยอดจะขึ้นที่นี่เมื่อเริ่มบันทึก</p>
+          ) : (
+            <ul className="mt-6 space-y-5">
+              {Object.entries(categoryTotals)
+                .sort((a, b) => b[1] - a[1])
+                .map(([cat, amt]) => (
+                  <li key={cat}>
+                    <div className="flex items-baseline justify-between gap-4">
+                      <span className="text-body text-ink">
+                        {CATEGORY_LABEL[cat as Expense['category']]}
+                      </span>
+                      <span className="text-fine text-stone">
+                        {baht(amt)} ·{' '}
+                        {totalExpense > 0 ? Math.round((amt / totalExpense) * 100) : 0}%
+                      </span>
+                    </div>
+                    <div className="mt-2">
+                      <Meter value={amt} max={totalExpense} />
+                    </div>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel>
+          <h2 className="font-display text-lead text-ink">ใครต้องโอนเพิ่ม</h2>
+          <p className="mt-2 text-fine text-stone border-b border-mist-deep pb-5">
+            ยอดสุทธิ คือเงินที่ออกไปแล้ว ลบด้วยส่วนเฉลี่ย {baht(perPerson)}
           </p>
+
+          {confirmedMembers.length === 0 ? (
+            <p className="mt-6 text-body text-stone">
+              ยังไม่มีใครคอนเฟิร์มไป เพิ่มชื่อเพื่อนก่อนแล้วยอดจะคำนวณให้เอง
+            </p>
+          ) : (
+            <ul className="mt-2 divide-y divide-mist-deep">
+              {confirmedMembers.map((member) => {
+                const paid = memberPaidMap[member.id] || 0;
+                const netBalance = paid - perPerson;
+                const isOwed = netBalance > 0;
+                const isEven = netBalance === 0;
+
+                return (
+                  <li key={member.id} className="py-4 flex items-center justify-between gap-4">
+                    <span className="inline-flex items-center gap-2.5 min-w-0">
+                      <span
+                        className="w-1.5 h-1.5 shrink-0"
+                        style={{ backgroundColor: member.avatarColor }}
+                        aria-hidden="true"
+                      />
+                      <span className="text-body text-ink truncate">{member.nickname}</span>
+                      <span className="text-fine text-stone shrink-0">
+                        ออกไป {baht(paid)}
+                      </span>
+                    </span>
+
+                    <span className="text-right shrink-0">
+                      <span className={`block text-body ${isEven ? 'text-stone' : 'text-ink'}`}>
+                        {isOwed
+                          ? `รับคืน ${baht(netBalance)}`
+                          : isEven
+                            ? 'พอดี'
+                            : `โอนเพิ่ม ${baht(Math.abs(netBalance))}`}
+                      </span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
+      </div>
+
+      <Panel className="mt-px">
+        <div className="flex items-baseline justify-between gap-4 border-b border-mist-deep pb-5">
+          <h2 className="font-display text-lead text-ink">รายการทั้งหมด</h2>
+          <span className="text-fine text-stone">{trip.expenses.length} รายการ</span>
         </div>
 
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs">
-          <span className="text-xs font-semibold text-slate-500 block mb-1">ยอดเฉลี่ยต่อคน (หารเท่า)</span>
-          <div className="text-3xl font-black text-slate-800">฿{perPerson.toLocaleString()}</div>
-          <p className="text-xs text-emerald-600 font-medium mt-2">
-            คำนวณจากเพื่อนที่คอนเฟิร์ม {memberCount} คน
-          </p>
-        </div>
+        {trip.expenses.length === 0 ? (
+          <Empty
+            title="ยังไม่มีใครควักเงิน"
+            note="บันทึกยอดแรกไว้ เช่น มัดจำที่พัก หรือค่าของสดที่ซื้อล่วงหน้า"
+            action={
+              <button onClick={handleOpenNewModal} className={btnLink}>
+                <Plus className="w-3.5 h-3.5" />
+                บันทึกรายการแรก
+              </button>
+            }
+          />
+        ) : (
+          <ul className="divide-y divide-mist-deep">
+            {trip.expenses.map((exp) => {
+              const payer = trip.members.find((m) => m.id === exp.payerId);
 
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-xs">
-          <span className="text-xs font-semibold text-slate-500 block mb-2">สัดส่วนตามหมวดหมู่</span>
-          <div className="space-y-1.5 text-xs">
-            {Object.entries(categoryTotals).map(([cat, amt]) => {
-              const pct = totalExpense > 0 ? Math.round((amt / totalExpense) * 100) : 0;
               return (
-                <div key={cat} className="flex items-center justify-between">
-                  <span className="text-slate-600">{getCategoryLabel(cat as Expense['category'])}</span>
-                  <span className="font-bold text-slate-800">฿{amt.toLocaleString()} ({pct}%)</span>
-                </div>
+                <li key={exp.id} className="py-4 flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-body text-ink">{exp.title}</p>
+                    <p className="mt-1 text-fine text-stone">
+                      {CATEGORY_LABEL[exp.category]} · {payer?.nickname || 'ไม่ระบุคนจ่าย'} ·{' '}
+                      {exp.date}
+                      {exp.notes && ` · ${exp.notes}`}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-5 shrink-0">
+                    <span className="text-body text-ink">{baht(exp.amount)}</span>
+                    <button
+                      onClick={() => handleOpenEditModal(exp)}
+                      className="text-stone hover:text-ink transition-colors"
+                      aria-label={`แก้ไขรายการ ${exp.title}`}
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteExpense(exp.id)}
+                      className="text-stone hover:text-ink transition-colors"
+                      aria-label={`ลบรายการ ${exp.title}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </li>
               );
             })}
-          </div>
-        </div>
-      </div>
+          </ul>
+        )}
+      </Panel>
 
-      {/* Settlement Balance Table (ใครต้องโอนให้ใคร) */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs">
-        <h3 className="text-base font-bold text-slate-800 mb-1">
-          📊 สรุปยอดเงินแต่ละคน (ใครจ่ายแล้ว / ใครต้องโอนเพิ่ม)
-        </h3>
-        <p className="text-xs text-slate-500 mb-4">
-          ยอดสุทธิ = (ยอดที่ออกเงินไปแล้ว) ลบ (ยอดเฉลี่ยกองกลาง ฿{perPerson.toLocaleString()})
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {confirmedMembers.map((member) => {
-            const paid = memberPaidMap[member.id] || 0;
-            const netBalance = paid - perPerson;
-            const isOwed = netBalance > 0;
-            const isEven = netBalance === 0;
-
-            return (
-              <div
-                key={member.id}
-                className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2.5">
-                  <span
-                    className="w-3 h-3 rounded-full shrink-0"
-                    style={{ backgroundColor: member.avatarColor }}
-                  />
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-800">{member.nickname}</h4>
-                    <span className="text-[11px] text-slate-500">
-                      ออกไปแล้ว: ฿{paid.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="text-right">
-                  <span
-                    className={`text-xs font-bold block ${
-                      isOwed ? 'text-emerald-700' : isEven ? 'text-slate-500' : 'text-rose-600'
-                    }`}
-                  >
-                    {isOwed ? `+฿${netBalance.toLocaleString()}` : isEven ? 'ครบแล้ว' : `-฿${Math.abs(netBalance).toLocaleString()}`}
-                  </span>
-                  <span className="text-[10px] text-slate-400">
-                    {isOwed ? 'รอรับเงินคืน' : isEven ? 'พอดีเป๊ะ' : 'ต้องโอนเพิ่ม'}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Expenses History List */}
-      <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-slate-800">รายการค่าใช้จ่ายทั้งหมด</h3>
-          <span className="text-xs text-slate-400">{trip.expenses.length} รายการ</span>
-        </div>
-
-        <div className="divide-y divide-slate-100">
-          {trip.expenses.map((exp) => {
-            const payer = trip.members.find((m) => m.id === exp.payerId);
-
-            return (
-              <div key={exp.id} className="py-3.5 flex items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-800">{exp.title}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-slate-100 text-slate-600">
-                      {getCategoryLabel(exp.category)}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-3 text-xs text-slate-500">
-                    <span>
-                      จ่ายโดย:{' '}
-                      <strong className="text-purple-700">{payer?.nickname || 'ไม่ระบุ'}</strong>
-                    </span>
-                    <span>•</span>
-                    <span>{exp.date}</span>
-                    {exp.notes && (
-                      <>
-                        <span>•</span>
-                        <span className="italic text-slate-400">{exp.notes}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-black text-slate-900">
-                    ฿{exp.amount.toLocaleString()}
-                  </span>
-                  <button
-                    onClick={() => handleOpenEditModal(exp)}
-                    className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-lg transition-colors"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteExpense(exp.id)}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-100 rounded-lg transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Modal: Add or Edit Expense */}
       {isExpenseModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-slate-800">
-                {editingExpense ? 'แก้ไขรายการค่าใช้จ่าย' : 'เพิ่มรายการค่าใช้จ่ายกองกลาง'}
-              </h3>
-              <button
-                onClick={() => setIsExpenseModalOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-              >
-                <X className="w-5 h-5" />
-              </button>
+        <Modal
+          title={editingExpense ? 'แก้ไขรายการ' : 'บันทึกค่าใช้จ่าย'}
+          onClose={() => setIsExpenseModalOpen(false)}
+          wide
+        >
+          <form onSubmit={handleSaveExpense} className="space-y-5">
+            <Field label="ชื่อรายการ" htmlFor="exp-title">
+              <input
+                id="exp-title"
+                type="text"
+                required
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="หมูกระทะและเนื้อสัตว์ จากแม็คโคร"
+                className={input}
+              />
+            </Field>
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="จำนวนเงิน บาท" htmlFor="exp-amount">
+                <input
+                  id="exp-amount"
+                  type="number"
+                  min={1}
+                  required
+                  value={amount}
+                  onChange={(e) => setAmount(Number(e.target.value))}
+                  placeholder="3500"
+                  className={input}
+                />
+              </Field>
+              <Field label="หมวดหมู่" htmlFor="exp-cat">
+                <select
+                  id="exp-cat"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value as Expense['category'])}
+                  className={input}
+                >
+                  <option value="accommodation">ที่พัก</option>
+                  <option value="food">อาหารและเครื่องดื่ม</option>
+                  <option value="fuel">น้ำมันและทางด่วน</option>
+                  <option value="tickets">ค่าเข้าและบัตรกิจกรรม</option>
+                  <option value="other">อื่น ๆ</option>
+                </select>
+              </Field>
             </div>
 
-            <form onSubmit={handleSaveExpense} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">ชื่อรายการ *</label>
-                <input
-                  type="text"
-                  required
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="เช่น ค่าหมูกระทะและเนื้อสัตว์ (แม็คโคร)"
-                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">จำนวนเงิน (บาท) *</label>
-                  <input
-                    type="number"
-                    min={1}
-                    required
-                    value={amount}
-                    onChange={(e) => setAmount(Number(e.target.value))}
-                    placeholder="เช่น 3500"
-                    className="w-full p-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-500 focus:outline-none font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">หมวดหมู่</label>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value as Expense['category'])}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-500 focus:outline-none bg-white"
-                  >
-                    <option value="accommodation">🏡 ค่าที่พัก/พูลวิลล่า</option>
-                    <option value="food">🍲 อาหาร & เครื่องดื่ม</option>
-                    <option value="fuel">⛽ น้ำมัน & ทางด่วน</option>
-                    <option value="tickets">🎟️ ค่าเข้า & บัตรกิจกรรม</option>
-                    <option value="other">📦 อื่นๆ</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">ใครเป็นคนสำรองจ่าย? *</label>
-                  <select
-                    value={payerId}
-                    onChange={(e) => setPayerId(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-500 focus:outline-none bg-white"
-                  >
-                    {trip.members.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.nickname} ({m.name})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">วันที่จ่าย</label>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">หมายเหตุ</label>
-                <input
-                  type="text"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="เช่น เก็บสลิปไว้แล้ว, หารทุกคน"
-                  className="w-full p-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-purple-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="pt-3 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsExpenseModalOpen(false)}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors"
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="ใครสำรองจ่าย" htmlFor="exp-payer">
+                <select
+                  id="exp-payer"
+                  value={payerId}
+                  onChange={(e) => setPayerId(e.target.value)}
+                  className={input}
                 >
-                  ยกเลิก
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold shadow-xs transition-colors"
-                >
-                  บันทึก
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+                  {trip.members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nickname}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="วันที่จ่าย" htmlFor="exp-date">
+                <input
+                  id="exp-date"
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className={input}
+                />
+              </Field>
+            </div>
+
+            <Field label="หมายเหตุ" htmlFor="exp-notes">
+              <input
+                id="exp-notes"
+                type="text"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="เก็บสลิปไว้แล้ว หารทุกคน"
+                className={input}
+              />
+            </Field>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setIsExpenseModalOpen(false)}
+                className={`flex-1 ${btnQuiet}`}
+              >
+                ยกเลิก
+              </button>
+              <button type="submit" className={`flex-1 ${btnSolid}`}>
+                บันทึก
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

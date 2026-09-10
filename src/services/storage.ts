@@ -4,6 +4,19 @@ import { TripData } from '../types/trip';
 import { initialTripData } from '../data/initialData';
 
 const LOCAL_STORAGE_KEY = 'khaoyai_trip_data_v2_planning';
+
+/**
+ * Trip identity and artwork ship with the build — no screen edits them — so
+ * they always win over whatever an older visit left in storage or Firestore.
+ * Everything else on the trip belongs to whoever filled it in.
+ */
+const BUILD_OWNED_FIELDS = {
+  title: initialTripData.title,
+  tagline: initialTripData.tagline,
+  destination: initialTripData.destination,
+  coverImage: initialTripData.coverImage,
+} as const;
+
 const FIREBASE_CONFIG_KEY = 'khaoyai_firebase_config';
 
 export interface FirebaseConfig {
@@ -102,7 +115,7 @@ export function loadLocalTripData(): TripData {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...initialTripData, ...parsed };
+      return { ...initialTripData, ...parsed, ...BUILD_OWNED_FIELDS };
     }
   } catch (e) {
     console.warn('Error reading local trip data', e);
@@ -133,7 +146,10 @@ export function subscribeToTrip(
         tripDocRef,
         (snapshot) => {
           if (snapshot.exists()) {
-            const data = snapshot.data() as TripData;
+            const data = {
+              ...(snapshot.data() as TripData),
+              ...BUILD_OWNED_FIELDS,
+            };
             saveLocalTripData(data);
             onData(data);
           } else {

@@ -1,14 +1,15 @@
 import { TripData } from '../types/trip';
+import coverImage from '../assets/khaoyai-cover.jpg';
 
 export const initialTripData: TripData = {
   id: 'khaoyai-trip-2026',
-  title: 'ทริปเขาใหญ่ (31 ต.ค. - 1 พ.ย.) 🌿⛺',
-  tagline: 'ทริป 2 วัน 1 คืน แก๊งเพื่อน 10-12 คน • กำลังเปิดโหวตที่พักและรวบรวมรถเดินทาง',
+  title: 'สองวันหนึ่งคืนที่เขาใหญ่',
+  tagline: 'แก๊งเพื่อน 10–12 คน กำลังโหวตที่พักและรวบรวมรถเดินทาง',
   destination: 'เขาใหญ่, ปากช่อง, นครราชสีมา',
   startDate: '2026-10-31',
   endDate: '2026-11-01',
   statusPhase: 'planning',
-  coverImage: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1600&q=80',
+  coverImage,
   members: [],
   cars: [],
   accommodationOptions: [],
@@ -32,7 +33,7 @@ export const initialTripData: TripData = {
   announcements: [
     {
       id: 'welcome-an',
-      text: '🎉 เริ่มเปิดวางแผนทริปเขาใหญ่ (31 ต.ค. - 1 พ.ย. 2569)! ตอนนี้กำลังสำรวจจำนวนคน ใครเอารถไปได้บ้าง และช่วยกันเสนอตัวเลือกที่พักพูลวิลล่าได้เลยครับ',
+      text: 'เปิดวางแผนทริปเขาใหญ่ 31 ต.ค. — 1 พ.ย. 2569 แล้ว ตอนนี้กำลังนับหัวว่าไปกี่คน ใครขับรถไปได้บ้าง และช่วยกันหาพูลวิลล่ากันอยู่',
       date: '2026-09-10',
       author: 'ผู้จัดทริป'
     }

@@ -1,24 +1,84 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------
+   Khao Yai — "ป่าตอนพลบ" design tokens
+   Palette pulled from the trip itself: forest at dusk, mountain
+   mist, and the brass lamps of a pool villa at night.
+   --------------------------------------------------------------- */
+@theme {
+  --color-ink: #12211c;        /* forest black-green — hero ground, headings */
+  --color-ink-soft: #1b2e27;   /* raised surface on ink */
+  --color-moss: #2f4a3c;       /* secondary surface, quiet fills */
+  --color-mist: #dde2db;       /* page ground */
+  --color-mist-deep: #c9d1c8;  /* hairlines on mist */
+  --color-paper: #f7f7f4;      /* panels */
+  --color-brass: #a88d4f;      /* the one accent */
+  --color-brass-lit: #c7ac72;  /* accent on dark ground */
+  --color-stone: #6e7a72;      /* secondary text */
+
+  --font-display: 'Trirong', 'Georgia', serif;
+  --font-sans: 'IBM Plex Sans Thai', system-ui, -apple-system, sans-serif;
+
+  /* Five sizes. There is no sixth. */
+  --text-display: 3rem;
+  --text-display--line-height: 1.08;
+  --text-title: 1.875rem;
+  --text-title--line-height: 1.25;
+  --text-lead: 1.25rem;
+  --text-lead--line-height: 1.5;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.65;
+  --text-fine: 0.8125rem;
+  --text-fine--line-height: 1.5;
+
+  --radius-ctl: 4px;
+}
+
 @layer base {
   body {
-    font-family: 'Prompt', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    font-family: var(--font-sans);
+    background: var(--color-mist);
+    color: var(--color-ink);
+  }
+
+  /* Thai serif needs a touch more air than its Latin metrics assume */
+  .font-display {
+    letter-spacing: -0.01em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brass);
+    outline-offset: 2px;
   }
 }
 
-/* Custom smooth scrollbar */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 9999px;
+  background: var(--color-mist-deep);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--color-stone);
 }
 
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}

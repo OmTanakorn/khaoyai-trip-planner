@@ -51,7 +51,7 @@ export function App() {
   const confirmedCount = trip.members.filter((m) => m.status === 'confirmed').length;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-['Prompt',sans-serif]">
+    <div className="min-h-screen bg-mist flex flex-col">
       {/* Top Navigation */}
       <Navbar
         activeTab={activeTab}
@@ -63,7 +63,11 @@ export function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-8">
+      <main
+        className={`flex-1 max-w-6xl w-full mx-auto ${
+          activeTab === 'overview' ? '' : 'px-5 sm:px-8 pt-8'
+        }`}
+      >
         {activeTab === 'overview' && (
           <OverviewTab
             trip={trip}
@@ -116,24 +120,21 @@ export function App() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-slate-100 py-6 text-center text-xs text-slate-400">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p>
-            🌿 <strong>{trip.title}</strong> • สร้างเพื่อเพื่อนๆ แก๊ง 10-12 คน
-          </p>
-          <div className="flex items-center gap-4">
+      <footer className="border-t border-mist-deep mt-px">
+        <div className="max-w-6xl mx-auto px-5 sm:px-8 py-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-fine text-stone">
+          <p>{trip.title} · วางแผนร่วมกันของแก๊ง 10–12 คน</p>
+          <div className="flex items-center gap-6">
             <button
               onClick={() => setIsShareModalOpen(true)}
-              className="hover:text-emerald-700 transition-colors"
+              className="hover:text-ink transition-colors"
             >
-              ส่งสรุปเข้า LINE
+              ส่งสรุปเข้าไลน์
             </button>
-            <span>•</span>
             <button
               onClick={() => setIsSyncModalOpen(true)}
-              className="hover:text-emerald-700 transition-colors"
+              className="hover:text-ink transition-colors"
             >
-              ตั้งค่า Cloud Sync
+              ตั้งค่าการซิงก์
             </button>
           </div>
         </div>

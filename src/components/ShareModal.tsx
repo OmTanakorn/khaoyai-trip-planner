@@ -1,14 +1,8 @@
 import React, { useState } from 'react';
-import { 
-  Share2, 
-  Copy, 
-  Check, 
-  MessageCircle, 
-  Link as LinkIcon, 
-  X, 
-  Sparkles 
-} from 'lucide-react';
+import { Copy, Check } from 'lucide-react';
 import { TripData } from '../types/trip';
+import { Modal, Field } from './ui';
+import { input, btnSolid, btnQuiet } from './ui-kit';
 
 interface ShareModalProps {
   isOpen: boolean;
@@ -24,28 +18,29 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, trip })
 
   const confirmedMembers = trip.members.filter((m) => m.status === 'confirmed');
 
-  // Format LINE text summary
   const generateLineSummary = () => {
-    let text = `🌿 ชวนไปเที่ยวเขาใหญ่ 2 วัน 1 คืน! 🚗⛺\n`;
-    text += `📅 วันที่: 31 ต.ค. - 1 พ.ย. 2569\n`;
-    text += `👥 เพื่อนที่คอนเฟิร์มแล้ว (${confirmedMembers.length} คน): ${confirmedMembers.length > 0 ? confirmedMembers.map(m => m.nickname).join(', ') : 'กำลังเปิดรับลงชื่อ'}\n\n`;
+    let text = `ทริปเขาใหญ่ สองวันหนึ่งคืน\n`;
+    text += `31 ต.ค. — 1 พ.ย. 2569\n\n`;
+    text += `ไปแน่แล้ว ${confirmedMembers.length} คน`;
+    text +=
+      confirmedMembers.length > 0
+        ? `: ${confirmedMembers.map((m) => m.nickname).join(', ')}\n`
+        : ` ยังเปิดรับลงชื่ออยู่\n`;
 
-    if (trip.confirmedAccommodation) {
-      text += `🏡 ที่พัก: ${trip.confirmedAccommodation.name}\n`;
-    } else {
-      text += `🏡 ที่พัก: กำลังเปิดโหวตพูลวิลล่า (ช่วยกันเสนอตัวเลือกได้เลย)\n`;
-    }
+    text += trip.confirmedAccommodation
+      ? `ที่พัก: ${trip.confirmedAccommodation.name}\n`
+      : `ที่พัก: ยังโหวตกันอยู่ เสนอวิลล่าที่เจอมาได้\n`;
 
     if (trip.cars.length > 0) {
-      text += `🚗 รถเดินทาง (${trip.cars.length} คัน):\n`;
+      text += `\nรถ ${trip.cars.length} คัน\n`;
       trip.cars.forEach((car, i) => {
-        text += `• คันที่ ${i + 1} (${car.driverName}): ${car.carModel} [รับได้ ${car.maxSeats} ที่นั่ง]\n`;
+        text += `${i + 1}. ${car.driverName} · ${car.carModel} · ${car.maxSeats} ที่นั่ง\n`;
       });
     } else {
-      text += `🚗 รถเดินทาง: กำลังเปิดรับอาสาสมัครคนขับรถ\n`;
+      text += `รถ: ยังไม่มีใครอาสาขับ\n`;
     }
 
-    text += `\n📌 มาร่วมลงชื่อ เสนอที่พัก/รถ และโหวตแผนเที่ยวได้ที่ลิงก์นี้:\n${window.location.href}`;
+    text += `\nลงชื่อ เสนอที่พัก และโหวตแผนเที่ยวได้ที่\n${window.location.href}`;
     return text;
   };
 
@@ -62,80 +57,62 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, trip })
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl space-y-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-              <Share2 className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-slate-800">แชร์ข้อมูลทริปให้เพื่อนในกลุ่ม</h3>
-              <p className="text-xs text-slate-500">คัดลอกลิงก์หรือข้อความสรุปส่งเข้ากลุ่ม LINE</p>
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Option 1: Copy Direct Link */}
-        <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
-          <label className="block text-xs font-bold text-slate-700">1. ลิงก์สำหรับเปิดดูเว็บทริป</label>
-          <div className="flex gap-2">
+    <Modal
+      title="แชร์ทริปให้เพื่อน"
+      note="ส่งลิงก์ให้เปิดเอง หรือคัดลอกสรุปไปวางในไลน์กลุ่ม"
+      onClose={onClose}
+      wide
+    >
+      <div className="space-y-7">
+        <Field label="ลิงก์เว็บทริป" htmlFor="share-link">
+          <div className="flex gap-3">
             <input
+              id="share-link"
               type="text"
               readOnly
               value={window.location.href}
-              className="flex-1 p-2 text-xs rounded-xl border border-slate-200 bg-white font-mono text-slate-600 truncate"
+              className={`${input} flex-1 truncate`}
             />
-            <button
-              onClick={handleCopyLink}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shrink-0"
-            >
-              {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedLink ? 'คัดลอกแล้ว!' : 'คัดลอกลิงก์'}</span>
+            <button onClick={handleCopyLink} className={`${btnSolid} shrink-0`}>
+              <span className="inline-flex items-center gap-1.5">
+                {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedLink ? 'คัดลอกแล้ว' : 'คัดลอก'}
+              </span>
             </button>
           </div>
-        </div>
+        </Field>
 
-        {/* Option 2: Formatted text for LINE */}
-        <div className="p-4 rounded-2xl bg-emerald-50/60 border border-emerald-200 space-y-2">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
-              <MessageCircle className="w-4 h-4 text-emerald-600" />
-              <span>2. ข้อความสรุปสำหรับส่งเข้ากลุ่ม LINE</span>
+        <div>
+          <div className="flex items-end justify-between gap-4 mb-1.5">
+            <label htmlFor="share-summary" className="text-fine text-stone">
+              สรุปสำหรับวางในไลน์
             </label>
-            <button
-              onClick={handleCopyLineText}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors"
-            >
-              {copiedLineText ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copiedLineText ? 'คัดลอกแล้ว!' : 'คัดลอกข้อความ LINE'}</span>
+            <button onClick={handleCopyLineText} className={btnSolid}>
+              <span className="inline-flex items-center gap-1.5">
+                {copiedLineText ? (
+                  <Check className="w-3.5 h-3.5" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+                {copiedLineText ? 'คัดลอกแล้ว' : 'คัดลอกสรุป'}
+              </span>
             </button>
           </div>
-
           <textarea
+            id="share-summary"
             readOnly
-            rows={8}
+            rows={10}
             value={generateLineSummary()}
-            className="w-full p-2.5 text-[11px] rounded-xl border border-emerald-200 bg-white text-slate-700 font-mono leading-relaxed"
+            className={`${input} leading-relaxed`}
           />
         </div>
 
-        <div className="pt-2 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition-colors"
-          >
+        <div className="flex justify-end">
+          <button onClick={onClose} className={btnQuiet}>
             ปิด
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 };
