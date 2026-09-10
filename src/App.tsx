@@ -11,10 +11,11 @@ import { SyncModal } from './components/SyncModal';
 import { ShareModal } from './components/ShareModal';
 import { TripData } from './types/trip';
 import { initialTripData } from './data/initialData';
-import { 
-  subscribeToTrip, 
-  persistTripData, 
-  isFirebaseConnected 
+import {
+  subscribeToTrip,
+  persistTripData,
+  isFirebaseConnected,
+  TripUpdate,
 } from './services/storage';
 
 export function App() {
@@ -41,9 +42,14 @@ export function App() {
     };
   }, []);
 
-  const handleUpdateTrip = (updatedTrip: TripData) => {
-    setTrip(updatedTrip);
-    persistTripData(updatedTrip).catch((err) => {
+  // Show the change straight away, then let the transaction settle what is
+  // stored. Whatever it writes comes back through the subscription.
+  const handleUpdateTrip = (update: TripUpdate) => {
+    setTrip((current) =>
+      typeof update === 'function' ? update(current) : update
+    );
+
+    persistTripData(trip.id, update).catch((err) => {
       console.error('Error persisting trip update:', err);
     });
   };

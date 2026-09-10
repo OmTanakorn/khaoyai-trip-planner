@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Pencil, X } from 'lucide-react';
 import { TripData, Car } from '../types/trip';
+import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Tag, Meter } from './ui';
 import { input, btnSolid, btnQuiet, btnLink } from './ui-kit';
 
 interface CarsTabProps {
   trip: TripData;
-  onUpdateTrip: (trip: TripData) => void;
+  onUpdateTrip: (update: TripUpdate) => void;
 }
 
 export const CarsTab: React.FC<CarsTabProps> = ({ trip, onUpdateTrip }) => {
@@ -61,21 +62,23 @@ export const CarsTab: React.FC<CarsTabProps> = ({ trip, onUpdateTrip }) => {
     if (!driverName.trim() || !carModel.trim()) return;
 
     if (editingCar) {
-      const updatedCars = trip.cars.map((c) =>
-        c.id === editingCar.id
-          ? {
-              ...c,
-              driverName,
-              carModel,
-              licensePlate,
-              maxSeats: Number(maxSeats),
-              meetingPoint,
-              departureTime,
-              notes,
-            }
-          : c
-      );
-      onUpdateTrip({ ...trip, cars: updatedCars });
+      onUpdateTrip((t) => ({
+        ...t,
+        cars: t.cars.map((c) =>
+          c.id === editingCar.id
+            ? {
+                ...c,
+                driverName,
+                carModel,
+                licensePlate,
+                maxSeats: Number(maxSeats),
+                meetingPoint,
+                departureTime,
+                notes,
+              }
+            : c
+        ),
+      }));
     } else {
       const newCar: Car = {
         id: `c-${Date.now()}`,
@@ -88,7 +91,7 @@ export const CarsTab: React.FC<CarsTabProps> = ({ trip, onUpdateTrip }) => {
         passengerIds: [],
         notes,
       };
-      onUpdateTrip({ ...trip, cars: [...trip.cars, newCar] });
+      onUpdateTrip((t) => ({ ...t, cars: [...t.cars, newCar] }));
     }
     setIsNewCarModalOpen(false);
   };
@@ -96,29 +99,35 @@ export const CarsTab: React.FC<CarsTabProps> = ({ trip, onUpdateTrip }) => {
   const handleDeleteCar = (carId: string) => {
     const car = trip.cars.find((c) => c.id === carId);
     if (!window.confirm(`ลบรถของ ${car?.driverName ?? 'คันนี้'} ออกจากทริป?`)) return;
-    onUpdateTrip({ ...trip, cars: trip.cars.filter((c) => c.id !== carId) });
+    onUpdateTrip((t) => ({ ...t, cars: t.cars.filter((c) => c.id !== carId) }));
   };
 
   const handleRemovePassenger = (carId: string, memberId: string) => {
-    const updatedCars = trip.cars.map((c) =>
-      c.id === carId
-        ? { ...c, passengerIds: c.passengerIds.filter((id) => id !== memberId) }
-        : c
-    );
-    onUpdateTrip({ ...trip, cars: updatedCars });
+    onUpdateTrip((t) => ({
+      ...t,
+      cars: t.cars.map((c) =>
+        c.id === carId
+          ? { ...c, passengerIds: c.passengerIds.filter((id) => id !== memberId) }
+          : c
+      ),
+    }));
   };
 
   const handleAddPassengerToCar = (carId: string, memberId: string) => {
-    const updatedCars = trip.cars.map((c) => {
-      let currentPassengers = c.passengerIds.filter((id) => id !== memberId);
-      if (c.id === carId) {
-        if (!currentPassengers.includes(memberId) && currentPassengers.length < c.maxSeats) {
-          currentPassengers = [...currentPassengers, memberId];
+    // Seat count is re-checked against the newest data, so two people claiming
+    // the last seat at once cannot both get it.
+    onUpdateTrip((t) => ({
+      ...t,
+      cars: t.cars.map((c) => {
+        let currentPassengers = c.passengerIds.filter((id) => id !== memberId);
+        if (c.id === carId) {
+          if (!currentPassengers.includes(memberId) && currentPassengers.length < c.maxSeats) {
+            currentPassengers = [...currentPassengers, memberId];
+          }
         }
-      }
-      return { ...c, passengerIds: currentPassengers };
-    });
-    onUpdateTrip({ ...trip, cars: updatedCars });
+        return { ...c, passengerIds: currentPassengers };
+      }),
+    }));
     setAssignPassengerModalCarId(null);
   };
 

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, ExternalLink } from 'lucide-react';
 import { TripData, AccommodationOption, Room } from '../types/trip';
+import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Tag, Meter } from './ui';
 import { input, btnSolid, btnQuiet, btnBrass, btnLink, baht } from './ui-kit';
 
 interface AccommodationTabProps {
   trip: TripData;
-  onUpdateTrip: (trip: TripData) => void;
+  onUpdateTrip: (update: TripUpdate) => void;
 }
 
 const FALLBACK_IMAGE =
@@ -32,18 +33,20 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
 
   const handleVote = (optionId: string) => {
     const voter = voterName.trim() || 'ฉัน';
-    const updatedOptions = trip.accommodationOptions.map((opt) => {
-      if (opt.id === optionId) {
-        const hasVoted = opt.votes.includes(voter);
-        return {
-          ...opt,
-          votes: hasVoted ? opt.votes.filter((v) => v !== voter) : [...opt.votes, voter],
-        };
-      }
-      return opt;
-    });
+    // Decided here, from what this person sees, so a retry cannot flip the
+    // vote back and forth.
+    const isAdding = !trip.accommodationOptions
+      .find((o) => o.id === optionId)
+      ?.votes.includes(voter);
 
-    onUpdateTrip({ ...trip, accommodationOptions: updatedOptions });
+    onUpdateTrip((t) => ({
+      ...t,
+      accommodationOptions: t.accommodationOptions.map((opt) => {
+        if (opt.id !== optionId) return opt;
+        const votes = opt.votes.filter((v) => v !== voter);
+        return { ...opt, votes: isAdding ? [...votes, voter] : votes };
+      }),
+    }));
   };
 
   const handleCreateOption = (e: React.FormEvent) => {
@@ -73,10 +76,10 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
       votes: [],
     };
 
-    onUpdateTrip({
-      ...trip,
-      accommodationOptions: [...trip.accommodationOptions, newOption],
-    });
+    onUpdateTrip((t) => ({
+      ...t,
+      accommodationOptions: [...t.accommodationOptions, newOption],
+    }));
 
     setOptionName('');
     setOptionLocation('');
@@ -90,10 +93,10 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
   const handleDeleteOption = (optionId: string) => {
     const opt = trip.accommodationOptions.find((o) => o.id === optionId);
     if (!window.confirm(`ลบ ${opt?.name ?? 'ตัวเลือกนี้'} ออกจากการโหวต?`)) return;
-    onUpdateTrip({
-      ...trip,
-      accommodationOptions: trip.accommodationOptions.filter((o) => o.id !== optionId),
-    });
+    onUpdateTrip((t) => ({
+      ...t,
+      accommodationOptions: t.accommodationOptions.filter((o) => o.id !== optionId),
+    }));
   };
 
   const handleFinalizeAccommodation = (option: AccommodationOption) => {
@@ -111,8 +114,8 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
       hasBathroom: i < option.bathrooms,
     }));
 
-    onUpdateTrip({
-      ...trip,
+    onUpdateTrip((t) => ({
+      ...t,
       confirmedAccommodation: {
         name: option.name,
         villaType: `พูลวิลล่าส่วนตัว ${option.bedrooms} ห้องนอน ${option.bathrooms} ห้องน้ำ รองรับได้ ${option.capacity} คน`,
@@ -126,12 +129,12 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({ trip, onUpda
         wifiPassword: 'khaoyaitrip2026',
         rooms,
       },
-    });
+    }));
   };
 
   const handleResetToPoll = () => {
     if (!window.confirm('กลับไปเปิดโหวตที่พักใหม่? การจัดห้องนอนที่ทำไว้จะหายไป')) return;
-    onUpdateTrip({ ...trip, confirmedAccommodation: undefined });
+    onUpdateTrip((t) => ({ ...t, confirmedAccommodation: undefined }));
   };
 
   /* ── Booked ─────────────────────────────────────────────── */

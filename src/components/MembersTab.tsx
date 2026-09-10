@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Phone, Trash2, Pencil, Plus } from 'lucide-react';
 import { TripData, Member } from '../types/trip';
+import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Tag } from './ui';
 import { input, btnSolid, btnQuiet, btnLink } from './ui-kit';
 
 interface MembersTabProps {
   trip: TripData;
-  onUpdateTrip: (trip: TripData) => void;
+  onUpdateTrip: (update: TripUpdate) => void;
 }
 
 const AVATAR_COLORS = [
@@ -56,12 +57,14 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
     if (!name.trim() || !nickname.trim()) return;
 
     if (editingMember) {
-      const updatedMembers = trip.members.map((m) =>
-        m.id === editingMember.id
-          ? { ...m, name, nickname, phone, status, role, paidDeposit }
-          : m
-      );
-      onUpdateTrip({ ...trip, members: updatedMembers });
+      onUpdateTrip((t) => ({
+        ...t,
+        members: t.members.map((m) =>
+          m.id === editingMember.id
+            ? { ...m, name, nickname, phone, status, role, paidDeposit }
+            : m
+        ),
+      }));
     } else {
       const newMem: Member = {
         id: `m-${Date.now()}`,
@@ -73,7 +76,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
         role,
         paidDeposit,
       };
-      onUpdateTrip({ ...trip, members: [...trip.members, newMem] });
+      onUpdateTrip((t) => ({ ...t, members: [...t.members, newMem] }));
     }
     setIsMemberModalOpen(false);
   };
@@ -88,27 +91,23 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
       return;
     }
 
-    const updatedCars = trip.cars.map((c) => ({
-      ...c,
-      passengerIds: c.passengerIds.filter((id) => id !== memberId),
+    onUpdateTrip((t) => ({
+      ...t,
+      members: t.members.filter((m) => m.id !== memberId),
+      cars: t.cars.map((c) => ({
+        ...c,
+        passengerIds: c.passengerIds.filter((id) => id !== memberId),
+      })),
+      confirmedAccommodation: t.confirmedAccommodation
+        ? {
+            ...t.confirmedAccommodation,
+            rooms: t.confirmedAccommodation.rooms.map((r) => ({
+              ...r,
+              guestIds: r.guestIds.filter((id) => id !== memberId),
+            })),
+          }
+        : undefined,
     }));
-
-    const updatedAccommodation = trip.confirmedAccommodation
-      ? {
-          ...trip.confirmedAccommodation,
-          rooms: trip.confirmedAccommodation.rooms.map((r) => ({
-            ...r,
-            guestIds: r.guestIds.filter((id) => id !== memberId),
-          })),
-        }
-      : undefined;
-
-    onUpdateTrip({
-      ...trip,
-      members: trip.members.filter((m) => m.id !== memberId),
-      cars: updatedCars,
-      confirmedAccommodation: updatedAccommodation,
-    });
   };
 
   const statusLabel: Record<Member['status'], string> = {

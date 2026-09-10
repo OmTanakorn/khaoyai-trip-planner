@@ -1,5 +1,12 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, doc, onSnapshot, setDoc, Firestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  doc,
+  onSnapshot,
+  setDoc,
+  runTransaction,
+  Firestore,
+} from 'firebase/firestore';
 import { TripData } from '../types/trip';
 import { initialTripData } from '../data/initialData';
 
@@ -196,19 +203,67 @@ export function subscribeToTrip(
   };
 }
 
-export async function persistTripData(data: TripData): Promise<void> {
-  // Always update local storage first for snappy UI
-  saveLocalTripData(data);
+/**
+ * A change to the trip: either a whole replacement (import, reset) or a
+ * function describing the change. Prefer the function — it is applied to
+ * whatever is stored at that moment, so two people saving at once keep both
+ * edits instead of the later save overwriting the earlier one.
+ *
+ * The function runs more than once (locally, then again inside the
+ * transaction, then again on every retry), so it must be pure: build new ids
+ * and timestamps before calling, not inside.
+ */
+export type TripUpdate = TripData | ((current: TripData) => TripData);
 
+function applyUpdate(update: TripUpdate, current: TripData): TripData {
+  return typeof update === 'function' ? update(current) : update;
+}
+
+/**
+ * Apply a change and sync it.
+ *
+ * With Firestore, the change runs inside a transaction: read the newest
+ * document, apply the change to that, write it back. Firestore retries the
+ * whole thing if someone else wrote in between, so concurrent edits to
+ * different parts of the trip both survive.
+ *
+ * Without Firestore, the change is applied to what is in local storage right
+ * now rather than to the caller's copy, which keeps two browser tabs honest.
+ */
+export async function persistTripData(
+  tripId: string,
+  update: TripUpdate
+): Promise<TripData> {
   const db = initFirebase();
-  if (db) {
-    try {
-      const tripDocRef = doc(db, 'trips', data.id);
-      await setDoc(tripDocRef, data);
-    } catch (e) {
-      console.error('Failed to sync to Firestore:', e);
-      throw e;
-    }
+
+  if (!db) {
+    const next = applyUpdate(update, loadLocalTripData());
+    saveLocalTripData(next);
+    return next;
+  }
+
+  const tripDocRef = doc(db, 'trips', tripId);
+
+  try {
+    const next = await runTransaction(db, async (tx) => {
+      const snapshot = await tx.get(tripDocRef);
+      const current = snapshot.exists()
+        ? { ...(snapshot.data() as TripData), ...BUILD_OWNED_FIELDS }
+        : loadLocalTripData();
+
+      const updated = applyUpdate(update, current);
+      tx.set(tripDocRef, updated);
+      return updated;
+    });
+
+    saveLocalTripData(next);
+    return next;
+  } catch (e) {
+    console.error('Failed to sync to Firestore:', e);
+    // Keep the edit on this device so it is not lost while the network is out.
+    const next = applyUpdate(update, loadLocalTripData());
+    saveLocalTripData(next);
+    throw e;
   }
 }
 

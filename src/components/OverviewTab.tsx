@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Plus, Send, ArrowRight } from 'lucide-react';
 import { TripData, Member } from '../types/trip';
+import { TripUpdate } from '../services/storage';
 
 interface OverviewTabProps {
   trip: TripData;
-  onUpdateTrip: (trip: TripData) => void;
+  onUpdateTrip: (update: TripUpdate) => void;
   setActiveTab: (tab: string) => void;
 }
 
@@ -46,20 +47,19 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     e.preventDefault();
     if (!newAnnouncement.trim()) return;
 
-    const updatedAnnouncements = [
-      {
-        id: `an-${Date.now()}`,
-        text: newAnnouncement.trim(),
-        date: new Date().toISOString().split('T')[0],
-        author: announcementAuthor.trim() || 'เพื่อนร่วมทริป',
-      },
-      ...trip.announcements,
-    ];
+    // Built out here, not inside the updater: the updater may run several
+    // times and the id and date must stay the same each time.
+    const announcement = {
+      id: `an-${Date.now()}`,
+      text: newAnnouncement.trim(),
+      date: new Date().toISOString().split('T')[0],
+      author: announcementAuthor.trim() || 'เพื่อนร่วมทริป',
+    };
 
-    onUpdateTrip({
-      ...trip,
-      announcements: updatedAnnouncements,
-    });
+    onUpdateTrip((t) => ({
+      ...t,
+      announcements: [announcement, ...t.announcements],
+    }));
     setNewAnnouncement('');
     setShowAnnounceForm(false);
   };
@@ -85,24 +85,24 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       carSeatsOffered: quickHasCar ? quickCarSeats : undefined,
     };
 
-    let updatedCars = [...trip.cars];
-    if (quickHasCar && quickCarModel.trim()) {
-      updatedCars.push({
-        id: `c-${Date.now()}`,
-        driverName: `${quickNickname.trim()} (${quickCarModel.trim()})`,
-        carModel: quickCarModel.trim(),
-        maxSeats: Number(quickCarSeats),
-        meetingPoint: 'รอกำหนดจุดนัดพบ',
-        departureTime: '07:30 น.',
-        passengerIds: [newMember.id],
-      });
-    }
+    const newCar =
+      quickHasCar && quickCarModel.trim()
+        ? {
+            id: `c-${Date.now()}`,
+            driverName: `${quickNickname.trim()} (${quickCarModel.trim()})`,
+            carModel: quickCarModel.trim(),
+            maxSeats: Number(quickCarSeats),
+            meetingPoint: 'รอกำหนดจุดนัดพบ',
+            departureTime: '07:30 น.',
+            passengerIds: [newMember.id],
+          }
+        : null;
 
-    onUpdateTrip({
-      ...trip,
-      members: [...trip.members, newMember],
-      cars: updatedCars,
-    });
+    onUpdateTrip((t) => ({
+      ...t,
+      members: [...t.members, newMember],
+      cars: newCar ? [...t.cars, newCar] : t.cars,
+    }));
 
     setQuickNickname('');
     setQuickName('');

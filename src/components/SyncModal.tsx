@@ -8,6 +8,7 @@ import {
   FirebaseConfig,
   exportTripToJson,
   importTripFromJson,
+  TripUpdate,
 } from '../services/storage';
 import { initialTripData } from '../data/initialData';
 import { Modal, Field } from './ui';
@@ -17,7 +18,7 @@ interface SyncModalProps {
   isOpen: boolean;
   onClose: () => void;
   trip: TripData;
-  onUpdateTrip: (trip: TripData) => void;
+  onUpdateTrip: (update: TripUpdate) => void;
 }
 
 export const SyncModal: React.FC<SyncModalProps> = ({

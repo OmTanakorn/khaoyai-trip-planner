@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Pencil } from 'lucide-react';
 import { TripData, Expense } from '../types/trip';
+import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Meter } from './ui';
 import { input, btnSolid, btnQuiet, btnLink, baht } from './ui-kit';
 
 interface ExpensesTabProps {
   trip: TripData;
-  onUpdateTrip: (trip: TripData) => void;
+  onUpdateTrip: (update: TripUpdate) => void;
 }
 
 const CATEGORY_LABEL: Record<Expense['category'], string> = {
@@ -77,12 +78,14 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
     if (!title.trim() || !amount) return;
 
     if (editingExpense) {
-      const updatedExpenses = trip.expenses.map((exp) =>
-        exp.id === editingExpense.id
-          ? { ...exp, title, amount: Number(amount), payerId, category, notes, date }
-          : exp
-      );
-      onUpdateTrip({ ...trip, expenses: updatedExpenses });
+      onUpdateTrip((t) => ({
+        ...t,
+        expenses: t.expenses.map((exp) =>
+          exp.id === editingExpense.id
+            ? { ...exp, title, amount: Number(amount), payerId, category, notes, date }
+            : exp
+        ),
+      }));
     } else {
       const newExp: Expense = {
         id: `exp-${Date.now()}`,
@@ -94,7 +97,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
         date,
         notes,
       };
-      onUpdateTrip({ ...trip, expenses: [...trip.expenses, newExp] });
+      onUpdateTrip((t) => ({ ...t, expenses: [...t.expenses, newExp] }));
     }
     setIsExpenseModalOpen(false);
   };
@@ -102,7 +105,10 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip }) 
   const handleDeleteExpense = (expenseId: string) => {
     const exp = trip.expenses.find((e) => e.id === expenseId);
     if (!window.confirm(`ลบรายการ ${exp?.title ?? 'นี้'} ออกจากบัญชี?`)) return;
-    onUpdateTrip({ ...trip, expenses: trip.expenses.filter((e) => e.id !== expenseId) });
+    onUpdateTrip((t) => ({
+      ...t,
+      expenses: t.expenses.filter((e) => e.id !== expenseId),
+    }));
   };
 
   return (

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Check, Plus, Trash2 } from 'lucide-react';
 import { TripData, PackingItem } from '../types/trip';
+import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Empty, Meter } from './ui';
 import { input, btnSolid } from './ui-kit';
 
 interface PackingTabProps {
   trip: TripData;
-  onUpdateTrip: (trip: TripData) => void;
+  onUpdateTrip: (update: TripUpdate) => void;
 }
 
 export const PackingTab: React.FC<PackingTabProps> = ({ trip, onUpdateTrip }) => {
@@ -22,17 +23,21 @@ export const PackingTab: React.FC<PackingTabProps> = ({ trip, onUpdateTrip }) =>
   const totalCount = trip.packingList.length;
 
   const handleTogglePacked = (itemId: string) => {
-    const updatedList = trip.packingList.map((item) =>
-      item.id === itemId ? { ...item, isPacked: !item.isPacked } : item
-    );
-    onUpdateTrip({ ...trip, packingList: updatedList });
+    const item = trip.packingList.find((i) => i.id === itemId);
+    const isPacked = !item?.isPacked;
+    onUpdateTrip((t) => ({
+      ...t,
+      packingList: t.packingList.map((i) => (i.id === itemId ? { ...i, isPacked } : i)),
+    }));
   };
 
   const handleAssignMember = (itemId: string, memberId: string) => {
-    const updatedList = trip.packingList.map((item) =>
-      item.id === itemId ? { ...item, assignedMemberId: memberId || undefined } : item
-    );
-    onUpdateTrip({ ...trip, packingList: updatedList });
+    onUpdateTrip((t) => ({
+      ...t,
+      packingList: t.packingList.map((item) =>
+        item.id === itemId ? { ...item, assignedMemberId: memberId || undefined } : item
+      ),
+    }));
   };
 
   const handleAddItem = (e: React.FormEvent) => {
@@ -48,15 +53,15 @@ export const PackingTab: React.FC<PackingTabProps> = ({ trip, onUpdateTrip }) =>
       isPacked: false,
     };
 
-    onUpdateTrip({ ...trip, packingList: [...trip.packingList, newItem] });
+    onUpdateTrip((t) => ({ ...t, packingList: [...t.packingList, newItem] }));
     setNewItemTitle('');
   };
 
   const handleDeleteItem = (itemId: string) => {
-    onUpdateTrip({
-      ...trip,
-      packingList: trip.packingList.filter((item) => item.id !== itemId),
-    });
+    onUpdateTrip((t) => ({
+      ...t,
+      packingList: t.packingList.filter((item) => item.id !== itemId),
+    }));
   };
 
   const filteredItems = trip.packingList.filter((item) =>
