@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Pencil } from 'lucide-react';
+import { Plus, Trash2, Pencil, ChevronRight } from 'lucide-react';
 import { TripData, Expense, Member, Payment, TripListEditor } from '../types/trip';
 import { PromptPayQR } from './PromptPayQR';
 import { SlipField } from './SlipField';
@@ -133,12 +133,19 @@ const LedgerRow: React.FC<{ balance: Balance; member?: Member }> = ({ balance, m
 };
 
 export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRemoveItem, me }) => {
+  // The page has two jobs — keeping the log, and settling up — and they happen
+  // weeks apart. Showing both at once is what made it a wall of numbers.
+  const [view, setView] = useState<'list' | 'settle'>('list');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | Expense['category']>('all');
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState<number | ''>('');
-  const [payerId, setPayerId] = useState(trip.members[0]?.id || '');
+  // Nine times out of ten you are recording what you just paid for yourself,
+  // so start there and let the odd case change it.
+  const defaultPayerId = me?.id || trip.members[0]?.id || '';
+  const [payerId, setPayerId] = useState(defaultPayerId);
   const [category, setCategory] = useState<Expense['category']>('food');
   const [notes, setNotes] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -216,19 +223,30 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRe
     onRemoveItem('payments', paymentId);
   };
 
-  const categoryTotals = trip.expenses.reduce(
-    (acc, curr) => {
-      acc[curr.category] = (acc[curr.category] || 0) + curr.amount;
-      return acc;
-    },
-    {} as Record<string, number>
-  );
+  const categoryGroups = (Object.keys(CATEGORY_LABEL) as Expense['category'][])
+    .map((cat) => {
+      const items = trip.expenses.filter((e) => e.category === cat);
+      return { cat, count: items.length, total: items.reduce((n, e) => n + e.amount, 0) };
+    })
+    .filter((g) => g.count > 0)
+    .sort((a, b) => b.total - a.total);
+
+  // Deleting the last expense of a category takes its chip away with it, so
+  // fall back to everything rather than leaving the list stuck on nothing.
+  const activeFilter =
+    categoryFilter !== 'all' && !categoryGroups.some((g) => g.cat === categoryFilter)
+      ? 'all'
+      : categoryFilter;
+  const shownExpenses =
+    activeFilter === 'all'
+      ? trip.expenses
+      : trip.expenses.filter((e) => e.category === activeFilter);
 
   const handleOpenNewModal = () => {
     setEditingExpense(null);
     setTitle('');
     setAmount('');
-    setPayerId(trip.members[0]?.id || '');
+    setPayerId(defaultPayerId);
     setCategory('food');
     setNotes('');
     setDate(new Date().toISOString().split('T')[0]);
@@ -313,250 +331,305 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRe
         </p>
         {balances.length > 0 && (
           <p className="mt-1.5 text-fine text-mist/50">
-            ของจริงไม่เท่ากัน เพราะแต่ละรายการหารคนละกลุ่ม ดูของแต่ละคนได้ที่ตารางด้านล่าง
+            ของจริงไม่เท่ากัน เพราะแต่ละรายการหารคนละกลุ่ม กดคิดตังกันตอนจบทริปเพื่อดูของแต่ละคน
           </p>
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-mist-deep">
-        <Panel>
-          <h2 className="font-display text-lead text-ink border-b border-mist-deep pb-5">
-            เงินหมดไปกับอะไร
-          </h2>
-          {Object.keys(categoryTotals).length === 0 ? (
-            <p className="mt-6 text-body text-stone">ยังไม่มีรายการ ยอดจะขึ้นที่นี่เมื่อเริ่มบันทึก</p>
-          ) : (
-            <ul className="mt-6 space-y-5">
-              {Object.entries(categoryTotals)
-                .sort((a, b) => b[1] - a[1])
-                .map(([cat, amt]) => (
-                  <li key={cat}>
-                    <div className="flex items-baseline justify-between gap-4">
-                      <span className="text-body text-ink">
-                        {CATEGORY_LABEL[cat as Expense['category']]}
-                      </span>
-                      <span className="text-fine text-stone">
-                        {baht(amt)} ·{' '}
-                        {totalExpense > 0 ? Math.round((amt / totalExpense) * 100) : 0}%
-                      </span>
-                    </div>
-                    <div className="mt-2">
-                      <Meter value={amt} max={totalExpense} />
-                    </div>
-                  </li>
-                ))}
-            </ul>
+      {/* Two views, one at a time: what we spent, and who owes whom. */}
+      <div className="bg-paper px-6 sm:px-8 mb-px">
+        <nav className="flex gap-8">
+          {([
+            { id: 'list', label: `รายการที่จ่ายไป ${trip.expenses.length}` },
+            { id: 'settle', label: 'คิดตังกัน' },
+          ] as const).map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setView(tab.id)}
+              aria-current={view === tab.id ? 'true' : undefined}
+              className={`py-4 text-body whitespace-nowrap border-b-2 transition-colors ${
+                view === tab.id
+                  ? 'border-brass text-ink'
+                  : 'border-transparent text-stone hover:text-ink'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {view === 'list' && (
+        <>
+          {categoryGroups.length > 0 && (
+            <Panel className="mb-px">
+              <details>
+                <summary className="text-fine text-stone cursor-pointer hover:text-ink">
+                  เงินหมดไปกับอะไร · {categoryGroups.length} หมวด
+                </summary>
+                <ul className="mt-6 space-y-5">
+                  {categoryGroups.map((g) => (
+                    <li key={g.cat}>
+                      <div className="flex items-baseline justify-between gap-4">
+                        <span className="text-body text-ink">{CATEGORY_LABEL[g.cat]}</span>
+                        <span className="text-fine text-stone tabular-nums">
+                          {baht(g.total)} ·{' '}
+                          {totalExpense > 0 ? Math.round((g.total / totalExpense) * 100) : 0}%
+                        </span>
+                      </div>
+                      <div className="mt-2">
+                        <Meter value={g.total} max={totalExpense} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </Panel>
           )}
-        </Panel>
 
-        <Panel>
-          <h2 className="font-display text-lead text-ink">ใครโอนให้ใคร</h2>
-          <p className="mt-2 text-fine text-stone border-b border-mist-deep pb-5">
-            โอนตามนี้แล้วจบ ไม่ต้องคิดต่อ
-          </p>
-
-          {transfers.length === 0 ? (
-            <p className="mt-6 text-body text-stone">
-              {trip.expenses.length === 0
-                ? 'ยังไม่มีรายการ พอเริ่มบันทึกแล้วยอดโอนจะขึ้นตรงนี้'
-                : 'ทุกคนจ่ายพอดีแล้ว ไม่มีใครต้องโอนใคร'}
-            </p>
-          ) : (
-            <ul className="mt-2 divide-y divide-mist-deep">
-              {transfers.map((tr, i) => (
-                <li key={`${tr.fromId}-${tr.toId}-${i}`} className="py-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-body text-ink truncate">
-                      {nameOf(tr.fromId)} <span className="text-stone">โอนให้</span>{' '}
-                      {nameOf(tr.toId)}
-                    </span>
-                    <span className="text-body text-ink shrink-0">{baht(tr.amount)}</span>
-                  </div>
-                  {(() => {
-                    const from = balances.find((b) => b.memberId === tr.fromId);
-                    if (!from) return null;
-                    return (
-                      <p className="mt-1 text-fine text-stone tabular-nums">
-                        ส่วนแบ่ง {baht(from.owes)} − สำรองจ่าย {baht(from.paid)}
-                        {from.settledOut > 0 && ` − โอนแล้ว ${baht(from.settledOut)}`}
-                        {from.settledIn > 0 && ` + รับมา ${baht(from.settledIn)}`} ={' '}
-                        {baht(-from.net)}
-                        {tr.amount !== -from.net && ` · ยอดนี้เป็นส่วนหนึ่ง`}
-                      </p>
-                    );
-                  })()}
-                  <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2">
+          <Panel>
+            {trip.expenses.length === 0 ? (
+              <Empty
+                title="ยังไม่มีใครควักเงิน"
+                note="บันทึกยอดแรกไว้ เช่น มัดจำที่พัก หรือค่าของสดที่ซื้อล่วงหน้า"
+                action={
+                  <button onClick={handleOpenNewModal} className={btnLink}>
+                    <Plus className="w-3.5 h-3.5" />
+                    บันทึกรายการแรก
+                  </button>
+                }
+              />
+            ) : (
+              <>
+                {/* Categories as a filter, so the list stays one thing at a time. */}
+                <div className="flex flex-wrap gap-x-6 gap-y-3 border-b border-mist-deep pb-5">
+                  {[
+                    { id: 'all' as const, label: 'ทั้งหมด', total: totalExpense },
+                    ...categoryGroups.map((g) => ({
+                      id: g.cat,
+                      label: CATEGORY_LABEL[g.cat],
+                      total: g.total,
+                    })),
+                  ].map((chip) => (
                     <button
-                      onClick={() => {
-                        setPaySlipId(undefined);
-                        setPayingTransfer(tr);
-                      }}
-                      className={btnLink}
+                      key={chip.id}
+                      onClick={() => setCategoryFilter(chip.id)}
+                      className={`text-fine whitespace-nowrap pb-1 border-b transition-colors ${
+                        activeFilter === chip.id
+                          ? 'text-ink border-brass'
+                          : 'text-stone border-transparent hover:text-ink'
+                      }`}
                     >
-                      {me?.id === tr.fromId ? 'จ่ายเลย' : 'เปิดคิวอาร์ให้'}
+                      {chip.label}{' '}
+                      <span className="tabular-nums text-stone">{baht(chip.total)}</span>
                     </button>
-                    {!promptPayOf(tr.toId) && (
-                      <span className="text-fine text-stone">
-                        {nameOf(tr.toId)} ยังไม่ได้ใส่เลขพร้อมเพย์
-                      </span>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+                  ))}
+                </div>
 
-          {payments.length > 0 && (
-            <div className="mt-8 pt-5 border-t border-mist-deep">
-              <h3 className="text-fine text-stone">โอนแล้ว</h3>
-              <ul className="mt-3 divide-y divide-mist-deep">
-                {payments.map((payment) => (
-                  <li key={payment.id} className="py-3">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="text-body text-ink truncate">
-                          {nameOf(payment.fromId)}{' '}
-                          <span className="text-stone">โอนให้</span> {nameOf(payment.toId)}
-                        </p>
-                        <p className="mt-0.5 text-fine text-stone">
-                          {baht(payment.amount)} · {payment.date}
-                          {!payment.slipId && ' · ยังไม่มีสลิป'}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => handleDeletePayment(payment.id)}
-                        className="text-stone hover:text-ink transition-colors shrink-0"
-                        aria-label={`ยกเลิกรายการโอนของ ${nameOf(payment.fromId)}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                <ul className="divide-y divide-mist-deep">
+                  {shownExpenses.map((exp) => {
+                    const payer = trip.members.find((m) => m.id === exp.payerId);
+                    const split = splitOf(exp);
+                    return (
+                      <li key={exp.id}>
+                        <details className="group py-4">
+                          <summary className="flex items-baseline gap-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                            <ChevronRight
+                              className="w-3.5 h-3.5 shrink-0 text-stone transition-transform group-open:rotate-90 translate-y-0.5"
+                              aria-hidden="true"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-body text-ink truncate">
+                                {exp.title}
+                              </span>
+                              <span className="block mt-0.5 text-fine text-stone truncate tabular-nums">
+                                {payer?.nickname || 'ไม่ระบุคนจ่าย'} · {exp.date}
+                                {split && ` · คนละ ${baht(split.base)}`}
+                              </span>
+                            </span>
+                            <span className="shrink-0 text-body text-ink tabular-nums">
+                              {baht(exp.amount)}
+                            </span>
+                          </summary>
+
+                          <div className="mt-4 ml-6.5 space-y-3">
+                            <p className="text-fine text-stone">
+                              {CATEGORY_LABEL[exp.category]} ·{' '}
+                              {exp.splitBetween?.length
+                                ? `หาร ${exp.splitBetween.map(nameOf).join(' ')}`
+                                : 'หารทุกคนที่ไปแน่'}
+                              {exp.notes && ` · ${exp.notes}`}
+                            </p>
+                            {split && (
+                              <p className="text-fine text-stone tabular-nums">
+                                {baht(exp.amount)} ÷ {split.ids.length} คน = คนละ{' '}
+                                {baht(split.base)}
+                                {split.remainder > 0 &&
+                                  ` (เศษอีก ฿${split.remainder} ตกที่ ${split.ids
+                                    .slice(0, split.remainder)
+                                    .map(nameOf)
+                                    .join(' ')} คนละ ฿1)`}
+                              </p>
+                            )}
+                            {exp.slipId && (
+                              <SlipField
+                                tripId={trip.id}
+                                slipId={exp.slipId}
+                                uploadedBy={me?.nickname ?? 'เพื่อนร่วมทริป'}
+                                label="ใบเสร็จ"
+                                onChange={(slipId) => onSaveItem('expenses', { ...exp, slipId })}
+                              />
+                            )}
+                            <div className="flex items-center gap-6 pt-1">
+                              <button
+                                onClick={() => handleOpenEditModal(exp)}
+                                className={btnLink}
+                                aria-label={`แก้ไขรายการ ${exp.title}`}
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                                แก้ไข
+                              </button>
+                              <button
+                                onClick={() => handleDeleteExpense(exp.id)}
+                                className="inline-flex items-center gap-1.5 text-fine text-stone hover:text-ink transition-colors"
+                                aria-label={`ลบรายการ ${exp.title}`}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                ลบ
+                              </button>
+                            </div>
+                          </div>
+                        </details>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                <div className="mt-8 pt-6 border-t border-mist-deep flex flex-wrap items-center justify-between gap-4">
+                  <p className="text-fine text-stone">
+                    บันทึกให้ครบก่อน แล้วค่อยคิดตังกันทีเดียวตอนจบทริป
+                  </p>
+                  <button onClick={() => setView('settle')} className={btnSolid}>
+                    คิดตังกันเลย
+                  </button>
+                </div>
+              </>
+            )}
+          </Panel>
+        </>
+      )}
+
+      {view === 'settle' && (
+        <>
+          <Panel className="mb-px">
+            <h2 className="font-display text-lead text-ink">ใครโอนให้ใคร</h2>
+            <p className="mt-2 text-fine text-stone border-b border-mist-deep pb-5">
+              คิดจากทุกรายการที่บันทึกไว้ ณ ตอนนี้ โอนตามนี้แล้วจบ ไม่ต้องคิดต่อ
+            </p>
+
+            {transfers.length === 0 ? (
+              <p className="mt-6 text-body text-stone">
+                {trip.expenses.length === 0
+                  ? 'ยังไม่มีรายการ พอเริ่มบันทึกแล้วยอดโอนจะขึ้นตรงนี้'
+                  : 'ทุกคนจ่ายพอดีแล้ว ไม่มีใครต้องโอนใคร'}
+              </p>
+            ) : (
+              <ul className="mt-2 divide-y divide-mist-deep">
+                {transfers.map((tr, i) => (
+                  <li key={`${tr.fromId}-${tr.toId}-${i}`} className="py-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-body text-ink truncate">
+                        {nameOf(tr.fromId)} <span className="text-stone">โอนให้</span>{' '}
+                        {nameOf(tr.toId)}
+                      </span>
+                      <span className="text-body text-ink shrink-0 tabular-nums">
+                        {baht(tr.amount)}
+                      </span>
                     </div>
-                    {payment.slipId && (
-                      <div className="mt-3">
-                        <SlipField
-                          tripId={trip.id}
-                          slipId={payment.slipId}
-                          uploadedBy={me?.nickname ?? 'เพื่อนร่วมทริป'}
-                          onChange={(slipId) =>
-                            onSaveItem('payments', { ...payment, slipId })
-                          }
-                        />
-                      </div>
-                    )}
+                    <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2">
+                      <button
+                        onClick={() => {
+                          setPaySlipId(undefined);
+                          setPayingTransfer(tr);
+                        }}
+                        className={btnLink}
+                      >
+                        {me?.id === tr.fromId ? 'จ่ายเลย' : 'เปิดคิวอาร์ให้'}
+                      </button>
+                      {!promptPayOf(tr.toId) && (
+                        <span className="text-fine text-stone">
+                          {nameOf(tr.toId)} ยังไม่ได้ใส่เลขพร้อมเพย์
+                        </span>
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
+            )}
 
-        </Panel>
-      </div>
-
-      {balances.length > 0 && (
-        <Panel className="mt-px">
-          <div className="flex items-baseline justify-between gap-4 border-b border-mist-deep pb-5">
-            <h2 className="font-display text-lead text-ink">ยอดของแต่ละคน</h2>
-            <span className="text-fine text-stone">กดดูที่มาของทุกบาท</span>
-          </div>
-          <ul className="divide-y divide-mist-deep">
-            {balances.map((b) => (
-              <LedgerRow
-                key={b.memberId}
-                balance={b}
-                member={trip.members.find((m) => m.id === b.memberId)}
-              />
-            ))}
-          </ul>
-        </Panel>
-      )}
-
-      <Panel className="mt-px">
-        <div className="flex items-baseline justify-between gap-4 border-b border-mist-deep pb-5">
-          <h2 className="font-display text-lead text-ink">รายการทั้งหมด</h2>
-          <span className="text-fine text-stone">{trip.expenses.length} รายการ</span>
-        </div>
-
-        {trip.expenses.length === 0 ? (
-          <Empty
-            title="ยังไม่มีใครควักเงิน"
-            note="บันทึกยอดแรกไว้ เช่น มัดจำที่พัก หรือค่าของสดที่ซื้อล่วงหน้า"
-            action={
-              <button onClick={handleOpenNewModal} className={btnLink}>
-                <Plus className="w-3.5 h-3.5" />
-                บันทึกรายการแรก
-              </button>
-            }
-          />
-        ) : (
-          <ul className="divide-y divide-mist-deep">
-            {trip.expenses.map((exp) => {
-              const payer = trip.members.find((m) => m.id === exp.payerId);
-
-              return (
-                <li key={exp.id} className="py-4 flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-body text-ink">{exp.title}</p>
-                    <p className="mt-1 text-fine text-stone">
-                      {CATEGORY_LABEL[exp.category]} · {payer?.nickname || 'ไม่ระบุคนจ่าย'} ·{' '}
-                      {exp.date} ·{' '}
-                      {exp.splitBetween?.length
-                        ? `หาร ${exp.splitBetween.map(nameOf).join(' ')}`
-                        : 'หารทุกคน'}
-                      {exp.notes && ` · ${exp.notes}`}
-                    </p>
-                    {(() => {
-                      const split = splitOf(exp);
-                      if (!split) return null;
-                      return (
-                        <p className="mt-1 text-fine text-stone tabular-nums">
-                          {baht(exp.amount)} ÷ {split.ids.length} คน = คนละ{' '}
-                          {baht(split.base)}
-                          {split.remainder > 0 &&
-                            ` (เศษอีก ฿${split.remainder} ตกที่ ${split.ids
-                              .slice(0, split.remainder)
-                              .map(nameOf)
-                              .join(' ')} คนละ ฿1)`}
-                        </p>
-                      );
-                    })()}
-                    {exp.slipId && (
-                      <div className="mt-3">
-                        <SlipField
-                          tripId={trip.id}
-                          slipId={exp.slipId}
-                          uploadedBy={me?.nickname ?? 'เพื่อนร่วมทริป'}
-                          label="ใบเสร็จ"
-                          onChange={(slipId) =>
-                            onSaveItem('expenses', { ...exp, slipId })
-                          }
-                        />
+            {payments.length > 0 && (
+              <details className="mt-8 pt-5 border-t border-mist-deep">
+                <summary className="text-fine text-stone cursor-pointer hover:text-ink">
+                  โอนกันไปแล้ว {payments.length} รายการ
+                </summary>
+                <ul className="mt-3 divide-y divide-mist-deep">
+                  {payments.map((payment) => (
+                    <li key={payment.id} className="py-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-body text-ink truncate">
+                            {nameOf(payment.fromId)}{' '}
+                            <span className="text-stone">โอนให้</span> {nameOf(payment.toId)}
+                          </p>
+                          <p className="mt-0.5 text-fine text-stone tabular-nums">
+                            {baht(payment.amount)} · {payment.date}
+                            {!payment.slipId && ' · ยังไม่มีสลิป'}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleDeletePayment(payment.id)}
+                          className="text-stone hover:text-ink transition-colors shrink-0"
+                          aria-label={`ยกเลิกรายการโอนของ ${nameOf(payment.fromId)}`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
-                    )}
-                  </div>
+                      {payment.slipId && (
+                        <div className="mt-3">
+                          <SlipField
+                            tripId={trip.id}
+                            slipId={payment.slipId}
+                            uploadedBy={me?.nickname ?? 'เพื่อนร่วมทริป'}
+                            onChange={(slipId) => onSaveItem('payments', { ...payment, slipId })}
+                          />
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </Panel>
 
-                  <div className="flex items-center gap-5 shrink-0">
-                    <span className="text-body text-ink">{baht(exp.amount)}</span>
-                    <button
-                      onClick={() => handleOpenEditModal(exp)}
-                      className="text-stone hover:text-ink transition-colors"
-                      aria-label={`แก้ไขรายการ ${exp.title}`}
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteExpense(exp.id)}
-                      className="text-stone hover:text-ink transition-colors"
-                      aria-label={`ลบรายการ ${exp.title}`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </Panel>
+          {balances.length > 0 && (
+            <Panel>
+              <div className="flex items-baseline justify-between gap-4 border-b border-mist-deep pb-5">
+                <h2 className="font-display text-lead text-ink">ยอดของแต่ละคน</h2>
+                <span className="text-fine text-stone">กดดูที่มาของทุกบาท</span>
+              </div>
+              <ul className="divide-y divide-mist-deep">
+                {balances.map((b) => (
+                  <LedgerRow
+                    key={b.memberId}
+                    balance={b}
+                    member={trip.members.find((m) => m.id === b.memberId)}
+                  />
+                ))}
+              </ul>
+            </Panel>
+          )}
+        </>
+      )}
 
       {payingTransfer && (
         <Modal
@@ -655,7 +728,11 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRe
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              <Field label="ใครสำรองจ่าย" htmlFor="exp-payer">
+              <Field
+                label="ใครสำรองจ่าย"
+                htmlFor="exp-payer"
+                hint={me ? 'ตั้งเป็นคุณไว้ให้แล้ว เปลี่ยนได้ถ้าคนอื่นจ่ายแทน' : undefined}
+              >
                 <select
                   id="exp-payer"
                   value={payerId}
@@ -665,6 +742,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRe
                   {trip.members.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.nickname}
+                      {m.id === me?.id ? ' · ฉัน' : ''}
                     </option>
                   ))}
                 </select>
