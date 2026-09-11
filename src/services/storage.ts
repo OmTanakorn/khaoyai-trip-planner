@@ -131,6 +131,13 @@ function initFirebase(): Firestore | null {
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager(),
         }),
+        // Clearing something optional — a slip, a note — leaves `undefined`
+        // behind, and Firestore rejects the whole write over it, so removing
+        // one slip would fail to save the trip at all. Drop those fields
+        // instead, which is what the local copy does anyway: JSON.stringify
+        // omits them. Without this the two copies disagree about what a
+        // cleared field means.
+        ignoreUndefinedProperties: true,
       });
     } catch {
       // Already initialised on this page, or the browser refuses storage.
@@ -208,6 +215,20 @@ export function saveLocalTripData(data: TripData): void {
 /** Higher wins. A trip stored before revisions existed counts as zero. */
 const revisionOf = (trip: Partial<TripData>): number => trip.revision ?? 0;
 
+/**
+ * Whether this device is holding an edit the cloud never accepted.
+ *
+ * `revision` counts up per device, so two phones that edited separately both
+ * reach 7 describing different trips — it says how many times *this* browser
+ * changed the trip, never who is more recent. Pushing a copy up because its
+ * number is larger is therefore how a stale device resurrects rows somebody
+ * else deleted.
+ *
+ * So the decision does not come from the numbers. Only a write that actually
+ * failed marks the device dirty, and only a dirty device pushes its copy up.
+ */
+let hasUnsyncedEdit = false;
+
 // Realtime subscription or local polling
 export function subscribeToTrip(
   tripId: string,
@@ -236,9 +257,11 @@ export function subscribeToTrip(
 
             // An edit made while the network was out lives only on this
             // device, and Firestore serves the older document from its cache
-            // until it reconnects. Keep the newer copy and push it up rather
-            // than letting the stale one erase what was typed.
-            if (revisionOf(data) < revisionOf(local)) {
+            // until it reconnects. Keep that copy and push it up — but only
+            // when a write really did fail here. Without that check a device
+            // whose counter merely runs ahead would overwrite the shared trip
+            // with its own older copy.
+            if (hasUnsyncedEdit && revisionOf(data) < revisionOf(local)) {
               onData(local);
               repairCloudCopy(tripDocRef, local);
               return;
@@ -309,6 +332,9 @@ function repairCloudCopy(tripDocRef: DocumentReference, local: TripData): void {
   if (repairInFlight) return;
   repairInFlight = true;
   setDoc(tripDocRef, local)
+    .then(() => {
+      hasUnsyncedEdit = false;
+    })
     .catch((err) => console.warn('Could not push the local trip copy up:', err))
     .finally(() => {
       repairInFlight = false;
@@ -381,10 +407,13 @@ export async function persistTripData(
     });
 
     saveLocalTripData(next);
+    hasUnsyncedEdit = false;
     return next;
   } catch (e) {
     console.error('Failed to sync to Firestore:', e);
-    // The edit is already on this device; only the cloud copy is behind.
+    // The edit is already on this device; only the cloud copy is behind. Say
+    // so, so the next snapshot pushes it up instead of discarding it.
+    hasUnsyncedEdit = true;
     throw e;
   }
 }
