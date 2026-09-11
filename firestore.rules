@@ -20,6 +20,13 @@ service cloud.firestore {
 
     // Legacy slips are base64 in the document. Keep them under the 1 MiB
     // ceiling; slips written since the bucket exists carry only a url.
+    function isTripList(name) {
+      return name in [
+        'members', 'cars', 'accommodationOptions', 'placeIdeas', 'menuIdeas',
+        'itinerary', 'expenses', 'payments', 'packingList', 'announcements'
+      ];
+    }
+
     function slipIsSmall() {
       return !('image' in request.resource.data)
         || request.resource.data.image.size() < 900000;
@@ -28,12 +35,12 @@ service cloud.firestore {
     match /trips/{tripId} {
       allow read: if signedIn();
 
-      // Every edit writes the whole trip back as one document, so the finest
-      // this can get is "what arrived is still this trip".
+      // The document holds only what describes the trip as a whole. Every
+      // list lives in a subcollection below, one item per document, so a save
+      // here cannot reach anybody's expenses or members.
       allow create, update: if signedIn()
         && request.resource.data.id == tripId
-        && request.resource.data.title is string
-        && request.resource.data.members is list;
+        && request.resource.data.title is string;
 
       // Nothing in the app deletes a trip, so nothing may.
       allow delete: if false;
@@ -42,6 +49,21 @@ service cloud.firestore {
         allow read: if signedIn();
         allow create, update: if signedIn() && slipIsSmall();
         allow delete: if signedIn();
+      }
+
+      // One document per item: an expense, a member, a packing item. A write
+      // names a single one of them, which is what stops a device holding an
+      // older copy from taking away what everybody else added.
+      //
+      // Named rather than matched by wildcard: rules combine with OR, so a
+      // `/{anything}/{id}` rule here would also grant slips and quietly undo
+      // the size limit that keeps a base64 photo under the document ceiling.
+      match /{list}/{itemId} {
+        allow read: if signedIn() && isTripList(list);
+        allow create, update: if signedIn()
+          && isTripList(list)
+          && request.resource.data.size() < 200;
+        allow delete: if signedIn() && isTripList(list);
       }
     }
 

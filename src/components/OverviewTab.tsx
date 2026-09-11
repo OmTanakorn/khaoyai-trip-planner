@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Plus, Send, ArrowRight, Trash2 } from 'lucide-react';
-import { TripData, Member } from '../types/trip';
+import { TripData, Member, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 
-interface OverviewTabProps {
+interface OverviewTabProps extends TripListEditor {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
   setActiveTab: (tab: string) => void;
@@ -13,7 +13,8 @@ interface OverviewTabProps {
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({
   trip,
-  onUpdateTrip,
+  onSaveItem,
+  onRemoveItem,
   setActiveTab,
   me,
   onChooseMe,
@@ -60,10 +61,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       author: announcementAuthor.trim() || 'เพื่อนร่วมทริป',
     };
 
-    onUpdateTrip((t) => ({
-      ...t,
-      announcements: [announcement, ...t.announcements],
-    }));
+    onSaveItem('announcements', announcement);
     setNewAnnouncement('');
     setShowAnnounceForm(false);
   };
@@ -71,10 +69,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   const handleDeleteAnnouncement = (id: string) => {
     const item = trip.announcements.find((a) => a.id === id);
     if (!window.confirm(`ลบข้อความของ ${item?.author ?? 'คนนี้'} ออกจากบอร์ด?`)) return;
-    onUpdateTrip((t) => ({
-      ...t,
-      announcements: t.announcements.filter((a) => a.id !== id),
-    }));
+    onRemoveItem('announcements', id);
   };
 
   const handleQuickRsvp = (e: React.FormEvent) => {
@@ -111,11 +106,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           }
         : null;
 
-    onUpdateTrip((t) => ({
-      ...t,
-      members: [...t.members, newMember],
-      cars: newCar ? [...t.cars, newCar] : t.cars,
-    }));
+    onSaveItem('members', newMember);
+    if (newCar) onSaveItem('cars', newCar);
 
     // This form is someone signing themselves up, so this browser is now them
     // — no second trip through the "who are you" picker. Someone filling it in

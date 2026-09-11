@@ -11,11 +11,14 @@ import { MembersTab } from './components/MembersTab';
 import { DayOfTab } from './components/DayOfTab';
 import { SyncModal } from './components/SyncModal';
 import { ShareModal } from './components/ShareModal';
-import { TripData, Member } from './types/trip';
+import { TripData, Member, TripListName } from './types/trip';
 import { initialTripData } from './data/initialData';
 import {
   subscribeToTrip,
   persistTripData,
+  replaceTripData,
+  saveTripItem,
+  removeTripItem,
   isFirebaseConnected,
   TripUpdate,
 } from './services/storage';
@@ -94,8 +97,13 @@ export function App() {
     };
   }, []);
 
-  // Show the change straight away, then let the transaction settle what is
-  // stored. Whatever it writes comes back through the subscription.
+  const reportSync = (err: unknown) => {
+    console.error('Error persisting trip update:', err);
+    setSyncError('บันทึกขึ้นคลาวด์ไม่สำเร็จ เพื่อนจะยังไม่เห็นการแก้ไขนี้');
+  };
+
+  // Show the change straight away, then let the write settle what is stored.
+  // Whatever it writes comes back through the subscription.
   const handleUpdateTrip = (update: TripUpdate) => {
     setTrip((current) =>
       typeof update === 'function' ? update(current) : update
@@ -103,10 +111,61 @@ export function App() {
 
     persistTripData(trip.id, update)
       .then(() => setSyncError(null))
-      .catch((err) => {
-        console.error('Error persisting trip update:', err);
-        setSyncError('บันทึกขึ้นคลาวด์ไม่สำเร็จ เพื่อนจะยังไม่เห็นการแก้ไขนี้');
-      });
+      .catch(reportSync);
+  };
+
+  /**
+   * Add an item to one of the trip's lists, or save a change to one.
+   *
+   * The screen is updated here and the item is written on its own. Nothing
+   * this call sends says anything about the other items, so no save can take
+   * somebody else's work away.
+   */
+  const handleSaveItem = (list: TripListName, value: object) => {
+    const item = value as { id?: string; dayNumber?: number };
+    setTrip((current) => {
+      const bag = current as unknown as Record<string, unknown>;
+      const existing = (bag[list] ?? []) as Array<{ id?: string; dayNumber?: number }>;
+      const matches = (other: { id?: string; dayNumber?: number }) =>
+        list === 'itinerary' ? other.dayNumber === item.dayNumber : other.id === item.id;
+      // Replaced rather than merged, to match what is written: a field the
+      // form cleared has to disappear here too.
+      const next = existing.some(matches)
+        ? existing.map((other) => (matches(other) ? item : other))
+        : [...existing, item];
+      return { ...current, [list]: next };
+    });
+
+    saveTripItem(trip.id, list, item)
+      .then(() => setSyncError(null))
+      .catch(reportSync);
+  };
+
+  /**
+   * Swap the whole trip out — an imported backup, or a reset. Deliberate, and
+   * the only path that drops items nobody removed by hand.
+   */
+  const handleReplaceTrip = (next: TripData) => {
+    setTrip(next);
+    replaceTripData(next.id, next)
+      .then(() => setSyncError(null))
+      .catch(reportSync);
+  };
+
+  /** Take an item off a list. The only thing that removes anything. */
+  const handleRemoveItem = (list: TripListName, itemId: string) => {
+    setTrip((current) => {
+      const bag = current as unknown as Record<string, unknown>;
+      const existing = (bag[list] ?? []) as Array<{ id?: string; dayNumber?: number }>;
+      const keep = existing.filter((other) =>
+        list === 'itinerary' ? `day-${other.dayNumber}` !== itemId : other.id !== itemId
+      );
+      return { ...current, [list]: keep };
+    });
+
+    removeTripItem(trip.id, list, itemId)
+      .then(() => setSyncError(null))
+      .catch(reportSync);
   };
 
   const confirmedCount = trip.members.filter((m) => m.status === 'confirmed').length;
@@ -124,6 +183,8 @@ export function App() {
       <WelcomeGate
         trip={trip}
         onUpdateTrip={handleUpdateTrip}
+        onSaveItem={handleSaveItem}
+        onRemoveItem={handleRemoveItem}
         onChooseMe={chooseMyMember}
         onSkip={browseAsGuest}
       />
@@ -156,6 +217,8 @@ export function App() {
           <OverviewTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
+        onSaveItem={handleSaveItem}
+        onRemoveItem={handleRemoveItem}
             setActiveTab={setActiveTab}
             me={me}
             onChooseMe={chooseMyMember}
@@ -166,6 +229,8 @@ export function App() {
           <CarsTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
+        onSaveItem={handleSaveItem}
+        onRemoveItem={handleRemoveItem}
           />
         )}
 
@@ -173,6 +238,8 @@ export function App() {
           <AccommodationTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
+        onSaveItem={handleSaveItem}
+        onRemoveItem={handleRemoveItem}
             me={me}
           />
         )}
@@ -181,6 +248,8 @@ export function App() {
           <ItineraryTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
+        onSaveItem={handleSaveItem}
+        onRemoveItem={handleRemoveItem}
             me={me}
           />
         )}
@@ -189,6 +258,8 @@ export function App() {
           <FoodTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
+        onSaveItem={handleSaveItem}
+        onRemoveItem={handleRemoveItem}
             me={me}
           />
         )}
@@ -197,6 +268,8 @@ export function App() {
           <ExpensesTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
+        onSaveItem={handleSaveItem}
+        onRemoveItem={handleRemoveItem}
             me={me}
           />
         )}
@@ -205,6 +278,8 @@ export function App() {
           <PackingTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
+        onSaveItem={handleSaveItem}
+        onRemoveItem={handleRemoveItem}
           />
         )}
 
@@ -216,6 +291,8 @@ export function App() {
           <MembersTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
+        onSaveItem={handleSaveItem}
+        onRemoveItem={handleRemoveItem}
             me={me}
             onChooseMe={chooseMyMember}
           />
@@ -249,6 +326,9 @@ export function App() {
         onClose={() => setIsSyncModalOpen(false)}
         trip={trip}
         onUpdateTrip={handleUpdateTrip}
+        onSaveItem={handleSaveItem}
+        onRemoveItem={handleRemoveItem}
+        onReplaceTrip={handleReplaceTrip}
       />
 
       <ShareModal

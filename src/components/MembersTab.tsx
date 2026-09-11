@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Phone, Trash2, Pencil, Plus } from 'lucide-react';
-import { TripData, Member } from '../types/trip';
+import { TripData, Member, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Tag } from './ui';
 import { input, btnSolid, btnQuiet, btnLink } from './ui-kit';
 
-interface MembersTabProps {
+interface MembersTabProps extends TripListEditor {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
   me: Member | null;
@@ -20,6 +20,8 @@ const AVATAR_COLORS = [
 export const MembersTab: React.FC<MembersTabProps> = ({
   trip,
   onUpdateTrip,
+  onSaveItem,
+  onRemoveItem,
   me,
   onChooseMe,
 }) => {
@@ -73,14 +75,16 @@ export const MembersTab: React.FC<MembersTabProps> = ({
     if (!name.trim() || !nickname.trim()) return;
 
     if (editingMember) {
-      onUpdateTrip((t) => ({
-        ...t,
-        members: t.members.map((m) =>
-          m.id === editingMember.id
-            ? { ...m, name, nickname, phone, promptPayId, status, role, paidDeposit }
-            : m
-        ),
-      }));
+      onSaveItem('members', {
+        ...editingMember,
+        name,
+        nickname,
+        phone,
+        promptPayId,
+        status,
+        role,
+        paidDeposit,
+      });
 
       if (isMe) {
         onChooseMe({ ...editingMember, nickname });
@@ -99,7 +103,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
         role,
         paidDeposit,
       };
-      onUpdateTrip((t) => ({ ...t, members: [...t.members, newMem] }));
+      onSaveItem('members', newMem);
       // Remember it on this device so the next visit already knows the name.
       if (isMe) onChooseMe(newMem);
     }
@@ -118,23 +122,31 @@ export const MembersTab: React.FC<MembersTabProps> = ({
 
     if (me?.id === memberId) onChooseMe(null);
 
-    onUpdateTrip((t) => ({
-      ...t,
-      members: t.members.filter((m) => m.id !== memberId),
-      cars: t.cars.map((c) => ({
-        ...c,
-        passengerIds: c.passengerIds.filter((id) => id !== memberId),
-      })),
-      confirmedAccommodation: t.confirmedAccommodation
-        ? {
-            ...t.confirmedAccommodation,
-            rooms: t.confirmedAccommodation.rooms.map((r) => ({
-              ...r,
-              guestIds: r.guestIds.filter((id) => id !== memberId),
-            })),
-          }
-        : undefined,
-    }));
+    onRemoveItem('members', memberId);
+
+    // Somebody who left the trip cannot still be in a seat or a bedroom. Each
+    // car is written on its own; the villa is part of the trip itself.
+    for (const car of trip.cars) {
+      if (!car.passengerIds.includes(memberId)) continue;
+      onSaveItem('cars', {
+        ...car,
+        passengerIds: car.passengerIds.filter((id) => id !== memberId),
+      });
+    }
+
+    const villa = trip.confirmedAccommodation;
+    if (villa?.rooms.some((r) => r.guestIds.includes(memberId))) {
+      onUpdateTrip((t) => ({
+        ...t,
+        confirmedAccommodation: t.confirmedAccommodation && {
+          ...t.confirmedAccommodation,
+          rooms: t.confirmedAccommodation.rooms.map((r) => ({
+            ...r,
+            guestIds: r.guestIds.filter((id) => id !== memberId),
+          })),
+        },
+      }));
+    }
   };
 
   const statusLabel: Record<Member['status'], string> = {

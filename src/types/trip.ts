@@ -189,3 +189,31 @@ export interface TripData {
   packingList: PackingItem[];
   announcements: Announcement[];
 }
+
+/** The lists on a trip that people add to, edit and delete from. */
+export const TRIP_LISTS = [
+  'members',
+  'cars',
+  'accommodationOptions',
+  'placeIdeas',
+  'menuIdeas',
+  'itinerary',
+  'expenses',
+  'payments',
+  'packingList',
+  'announcements',
+] as const;
+
+export type TripListName = (typeof TRIP_LISTS)[number];
+
+/**
+ * How a screen changes a list.
+ *
+ * Adding and editing go through `onSaveItem`, which writes that item alone.
+ * Removing has its own call and is the only thing that takes anything away —
+ * no screen can drop an item by handing back a shorter list.
+ */
+export interface TripListEditor {
+  onSaveItem: (list: TripListName, item: object) => void;
+  onRemoveItem: (list: TripListName, itemId: string) => void;
+}

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { TripData, Member } from '../types/trip';
+import { TripData, Member, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 import { input, btnSolid } from './ui-kit';
 
-interface WelcomeGateProps {
+interface WelcomeGateProps extends TripListEditor {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
   /** Claim this browser for a member — existing, or one just created here. */
@@ -25,7 +25,7 @@ const normalise = (value: string) => value.trim().toLowerCase();
  */
 export const WelcomeGate: React.FC<WelcomeGateProps> = ({
   trip,
-  onUpdateTrip,
+  onSaveItem,
   onChooseMe,
   onSkip,
 }) => {
@@ -56,7 +56,7 @@ export const WelcomeGate: React.FC<WelcomeGateProps> = ({
       role: trip.members.length === 0 ? 'organizer' : 'member',
     };
 
-    onUpdateTrip((t) => ({ ...t, members: [...t.members, newMember] }));
+    onSaveItem('members', newMember);
     onChooseMe(newMember);
   };
 

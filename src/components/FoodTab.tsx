@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import { TripData, MenuIdea, Member } from '../types/trip';
+import { TripData, MenuIdea, Member, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Meter } from './ui';
 import { input, btnSolid, btnQuiet, btnLink, baht, voterLabel } from './ui-kit';
 
-interface FoodTabProps {
+interface FoodTabProps extends TripListEditor {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
   me: Member | null;
@@ -30,7 +30,7 @@ const MEAL_LABEL: Record<MenuIdea['meal'], string> = {
 /** The order the sittings actually happen, so the groups read as a timeline. */
 const MEAL_ORDER: MenuIdea['meal'][] = ['dinner', 'latenight', 'breakfast', 'anytime'];
 
-export const FoodTab: React.FC<FoodTabProps> = ({ trip, onUpdateTrip, me }) => {
+export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem, me }) => {
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
   const [editingMenu, setEditingMenu] = useState<MenuIdea | null>(null);
 
@@ -81,40 +81,24 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onUpdateTrip, me }) => {
     if (!title.trim()) return;
 
     const price = Number(perHead);
-    // Firestore rejects `undefined`, so leave the key off when it is blank
-    // rather than writing an empty value.
-    const priceField =
-      perHead.trim() && Number.isFinite(price) && price > 0
-        ? { estimatedPerHead: price }
-        : {};
-
     const fields = {
       title: title.trim(),
       category,
       meal,
       suggestedBy: suggestedBy.trim() || 'เพื่อนร่วมทริป',
       notes: notes.trim(),
-      ...priceField,
+      // Left undefined when the box is blank, which drops the field on the way
+      // out — a price someone cleared has to actually go.
+      estimatedPerHead:
+        perHead.trim() && Number.isFinite(price) && price > 0 ? price : undefined,
     };
 
-    // Minted out here: the updater runs again on every transaction retry.
-    const newItem: MenuIdea = { id: `menu-${Date.now()}`, votes: [], ...fields };
-    const edited = editingMenu;
-
-    onUpdateTrip((t) => {
-      const current = t.menuIdeas ?? [];
-      return {
-        ...t,
-        menuIdeas: edited
-          ? current.map((m) =>
-              m.id === edited.id
-                ? // Drop a price that was cleared instead of keeping the old one.
-                  { id: m.id, votes: m.votes, ...fields }
-                : m
-            )
-          : [...current, newItem],
-      };
-    });
+    onSaveItem(
+      'menuIdeas',
+      editingMenu
+        ? { ...editingMenu, ...fields }
+        : ({ id: `menu-${Date.now()}`, votes: [], ...fields } as MenuIdea)
+    );
     setIsMenuModalOpen(false);
   };
 
@@ -123,24 +107,17 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onUpdateTrip, me }) => {
     const voter = me.id;
     const isAdding = !menuIdeas.find((m) => m.id === menuId)?.votes.includes(voter);
 
-    onUpdateTrip((t) => ({
-      ...t,
-      menuIdeas: (t.menuIdeas ?? []).map((item) => {
-        if (item.id !== menuId) return item;
-        const votes = item.votes.filter((v) => v !== voter);
-        return { ...item, votes: isAdding ? [...votes, voter] : votes };
-      }),
-    }));
+    const item = (trip.menuIdeas ?? []).find((m) => m.id === menuId);
+    if (!item) return;
+    const votes = item.votes.filter((v) => v !== voter);
+    onSaveItem('menuIdeas', { ...item, votes: isAdding ? [...votes, voter] : votes });
   };
 
   const handleDelete = (menuId: string) => {
     const item = menuIdeas.find((m) => m.id === menuId);
     if (!window.confirm(`ลบ ${item?.title ?? 'เมนูนี้'} ออกจากรายการโหวต?`)) return;
 
-    onUpdateTrip((t) => ({
-      ...t,
-      menuIdeas: (t.menuIdeas ?? []).filter((m) => m.id !== menuId),
-    }));
+    onRemoveItem('menuIdeas', menuId);
   };
 
   const groups = MEAL_ORDER.map((mealKey) => ({

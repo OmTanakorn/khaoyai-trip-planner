@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Pencil, X } from 'lucide-react';
-import { TripData, Car } from '../types/trip';
+import { TripData, Car, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Tag, Meter } from './ui';
 import { input, btnSolid, btnQuiet, btnLink } from './ui-kit';
 
-interface CarsTabProps {
+interface CarsTabProps extends TripListEditor {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
 }
 
-export const CarsTab: React.FC<CarsTabProps> = ({ trip, onUpdateTrip }) => {
+export const CarsTab: React.FC<CarsTabProps> = ({ trip, onSaveItem, onRemoveItem }) => {
   const [editingCar, setEditingCar] = useState<Car | null>(null);
   const [isNewCarModalOpen, setIsNewCarModalOpen] = useState(false);
   const [assignPassengerModalCarId, setAssignPassengerModalCarId] = useState<string | null>(null);
@@ -62,23 +62,16 @@ export const CarsTab: React.FC<CarsTabProps> = ({ trip, onUpdateTrip }) => {
     if (!driverName.trim() || !carModel.trim()) return;
 
     if (editingCar) {
-      onUpdateTrip((t) => ({
-        ...t,
-        cars: t.cars.map((c) =>
-          c.id === editingCar.id
-            ? {
-                ...c,
-                driverName,
-                carModel,
-                licensePlate,
-                maxSeats: Number(maxSeats),
-                meetingPoint,
-                departureTime,
-                notes,
-              }
-            : c
-        ),
-      }));
+      onSaveItem('cars', {
+        ...editingCar,
+        driverName,
+        carModel,
+        licensePlate,
+        maxSeats: Number(maxSeats),
+        meetingPoint,
+        departureTime,
+        notes,
+      });
     } else {
       const newCar: Car = {
         id: `c-${Date.now()}`,
@@ -91,7 +84,7 @@ export const CarsTab: React.FC<CarsTabProps> = ({ trip, onUpdateTrip }) => {
         passengerIds: [],
         notes,
       };
-      onUpdateTrip((t) => ({ ...t, cars: [...t.cars, newCar] }));
+      onSaveItem('cars', newCar);
     }
     setIsNewCarModalOpen(false);
   };
@@ -99,35 +92,32 @@ export const CarsTab: React.FC<CarsTabProps> = ({ trip, onUpdateTrip }) => {
   const handleDeleteCar = (carId: string) => {
     const car = trip.cars.find((c) => c.id === carId);
     if (!window.confirm(`ลบรถของ ${car?.driverName ?? 'คันนี้'} ออกจากทริป?`)) return;
-    onUpdateTrip((t) => ({ ...t, cars: t.cars.filter((c) => c.id !== carId) }));
+    onRemoveItem('cars', carId);
   };
 
   const handleRemovePassenger = (carId: string, memberId: string) => {
-    onUpdateTrip((t) => ({
-      ...t,
-      cars: t.cars.map((c) =>
-        c.id === carId
-          ? { ...c, passengerIds: c.passengerIds.filter((id) => id !== memberId) }
-          : c
-      ),
-    }));
+    const car = trip.cars.find((c) => c.id === carId);
+    if (!car) return;
+    onSaveItem('cars', {
+      ...car,
+      passengerIds: car.passengerIds.filter((id) => id !== memberId),
+    });
   };
 
   const handleAddPassengerToCar = (carId: string, memberId: string) => {
     // Seat count is re-checked against the newest data, so two people claiming
     // the last seat at once cannot both get it.
-    onUpdateTrip((t) => ({
-      ...t,
-      cars: t.cars.map((c) => {
-        let currentPassengers = c.passengerIds.filter((id) => id !== memberId);
-        if (c.id === carId) {
-          if (!currentPassengers.includes(memberId) && currentPassengers.length < c.maxSeats) {
-            currentPassengers = [...currentPassengers, memberId];
-          }
-        }
-        return { ...c, passengerIds: currentPassengers };
-      }),
-    }));
+    // Riding in one car means not riding in another, so every car this
+    // person was in is written too — each as its own save, so seating one
+    // passenger never rewrites the rest of the list.
+    for (const c of trip.cars) {
+      const without = c.passengerIds.filter((id) => id !== memberId);
+      const seated =
+        c.id === carId && without.length < c.maxSeats ? [...without, memberId] : without;
+      if (seated.length !== c.passengerIds.length) {
+        onSaveItem('cars', { ...c, passengerIds: seated });
+      }
+    }
     setAssignPassengerModalCarId(null);
   };
 

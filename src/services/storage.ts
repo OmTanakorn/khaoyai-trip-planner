@@ -5,15 +5,17 @@ import {
   persistentLocalCache,
   persistentMultipleTabManager,
   doc,
+  collection,
   onSnapshot,
+  getDocs,
   setDoc,
-  runTransaction,
+  deleteDoc,
+  deleteField,
   Firestore,
-  DocumentReference,
 } from 'firebase/firestore';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import { getStorage, FirebaseStorage } from 'firebase/storage';
-import { TripData } from '../types/trip';
+import { TripData, TRIP_LISTS, TripListName } from '../types/trip';
 import { initialTripData } from '../data/initialData';
 
 const LOCAL_STORAGE_KEY = 'khaoyai_trip_data_v2_planning';
@@ -190,6 +192,65 @@ export function authReady(): Promise<void> {
   return signInAttempt;
 }
 
+/*
+ * How a trip is stored.
+ *
+ * The trip document holds only what describes the trip as a whole — its title,
+ * its dates, which phase it is in. Every list people edit lives in its own
+ * subcollection, one document per item:
+ *
+ *   trips/{tripId}/expenses/{expenseId}
+ *   trips/{tripId}/members/{memberId}
+ *
+ * This is the difference between losing a trip and not. When the whole trip
+ * was one document, every save rewrote all of it, so any device writing an
+ * older copy erased everyone else's work — which is exactly what happened:
+ * three expenses added on a phone were overwritten by a laptop that had been
+ * sitting on a stale copy, and the document's revision counted backwards.
+ *
+ * Now a device only ever writes the items it touched. It cannot express "and
+ * nothing else exists", so it cannot take anything away. Something disappears
+ * only when `removeTripItem` is called for it — a delete is a deliberate act,
+ * never a side effect of syncing.
+ */
+
+export type { TripListName };
+
+/** Item of any trip list, as stored. */
+type StoredItem = Record<string, unknown> & { id?: string; __order?: number };
+
+/**
+ * Which document an item belongs in.
+ *
+ * Every list item carries an `id` except an itinerary day, which is identified
+ * by the day it is — so that is what names its document.
+ */
+function itemKey(list: TripListName, item: StoredItem): string | null {
+  if (list === 'itinerary') {
+    const day = item.dayNumber;
+    return typeof day === 'number' ? `day-${day}` : null;
+  }
+  return typeof item.id === 'string' && item.id ? item.id : null;
+}
+
+/**
+ * Put a list back in the order people expect.
+ *
+ * Documents come back sorted by id, which is not the order anything was added
+ * in. `__order` is stamped when an item is first written and rides along
+ * through every later edit, so editing something does not move it.
+ */
+function sortList(list: TripListName, items: StoredItem[]): StoredItem[] {
+  if (list === 'itinerary') {
+    return [...items].sort(
+      (a, b) => ((a.dayNumber as number) ?? 0) - ((b.dayNumber as number) ?? 0)
+    );
+  }
+  // The board reads newest first; every other list keeps the order it grew in.
+  const direction = list === 'announcements' ? -1 : 1;
+  return [...items].sort((a, b) => direction * ((a.__order ?? 0) - (b.__order ?? 0)));
+}
+
 // Local Storage helpers
 export function loadLocalTripData(): TripData {
   try {
@@ -212,24 +273,14 @@ export function saveLocalTripData(data: TripData): void {
   }
 }
 
-/** Higher wins. A trip stored before revisions existed counts as zero. */
-const revisionOf = (trip: Partial<TripData>): number => trip.revision ?? 0;
-
 /**
- * Whether this device is holding an edit the cloud never accepted.
+ * Watch the trip and every list on it, and report the whole thing whenever any
+ * part changes.
  *
- * `revision` counts up per device, so two phones that edited separately both
- * reach 7 describing different trips — it says how many times *this* browser
- * changed the trip, never who is more recent. Pushing a copy up because its
- * number is larger is therefore how a stale device resurrects rows somebody
- * else deleted.
- *
- * So the decision does not come from the numbers. Only a write that actually
- * failed marks the device dirty, and only a dirty device pushes its copy up.
+ * Each list has its own listener, so an expense arriving never carries an
+ * opinion about the packing list. The pieces are assembled here into the one
+ * `TripData` the screens already expect.
  */
-let hasUnsyncedEdit = false;
-
-// Realtime subscription or local polling
 export function subscribeToTrip(
   tripId: string,
   onData: (data: TripData) => void,
@@ -237,124 +288,187 @@ export function subscribeToTrip(
 ): () => void {
   const db = initFirebase();
 
-  if (db) {
-    try {
-      // Signing in is a round trip, and the rules turn away whatever arrives
-      // before it lands. Put this device's copy on screen meanwhile so the
-      // trip is never blank while that happens.
-      onData(loadLocalTripData());
+  if (!db) {
+    // LocalStorage broadcast listener across browser tabs!
+    const handleStorageEvent = (event: StorageEvent) => {
+      if (event.key === LOCAL_STORAGE_KEY && event.newValue) {
+        try {
+          onData(withDefaults(JSON.parse(event.newValue)));
+        } catch (err) {
+          console.error('Storage event parse error', err);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageEvent);
+    onData(loadLocalTripData());
+    return () => window.removeEventListener('storage', handleStorageEvent);
+  }
 
-      let live: (() => void) | null = null;
-      let stopped = false;
+  // Signing in is a round trip, and the rules turn away whatever arrives
+  // before it lands. Put this device's copy on screen meanwhile so the trip is
+  // never blank while that happens.
+  const seed = loadLocalTripData();
+  onData(seed);
 
-      const tripDocRef = doc(db, 'trips', tripId);
-      const start = () => onSnapshot(
+  let trip: Partial<TripData> = seed;
+  const lists = new Map<TripListName, StoredItem[]>();
+  let stopped = false;
+  const unsubscribes: Array<() => void> = [];
+
+  const emit = () => {
+    if (stopped) return;
+    const assembled = withDefaults(trip);
+    const bag = assembled as unknown as Record<string, unknown>;
+    for (const list of TRIP_LISTS) {
+      const items = lists.get(list);
+      // A list with no documents yet is not the same as an empty list: it is a
+      // list whose first snapshot has not arrived, or one still living inline
+      // on the trip document from before the split. Leave whatever is there.
+      if (items && items.length) bag[list] = sortList(list, items);
+    }
+    saveLocalTripData(assembled);
+    onData(assembled);
+  };
+
+  const fail = (err: unknown) => {
+    console.warn('Firestore subscription error:', err);
+    if (onError) onError(err);
+  };
+
+  authReady().then(() => {
+    if (stopped) return;
+
+    const tripDocRef = doc(db, 'trips', tripId);
+    unsubscribes.push(
+      onSnapshot(
         tripDocRef,
         (snapshot) => {
           if (snapshot.exists()) {
-            const data = withDefaults(snapshot.data() as TripData);
-            const local = loadLocalTripData();
-
-            // An edit made while the network was out lives only on this
-            // device, and Firestore serves the older document from its cache
-            // until it reconnects. Keep that copy and push it up — but only
-            // when a write really did fail here, and only against what the
-            // server actually holds.
-            //
-            // The cached snapshot arrives first and can be hours behind, so
-            // judging by it is how one phone opening the app overwrote three
-            // expenses another had just added: its cache looked older than
-            // its own copy, so it pushed that copy over everyone else's work.
-            const fromServer = !snapshot.metadata.fromCache;
-            if (fromServer && hasUnsyncedEdit && revisionOf(data) < revisionOf(local)) {
-              onData(local);
-              repairCloudCopy(tripDocRef, local);
-              return;
-            }
-
-            saveLocalTripData(data);
-            onData(data);
+            trip = snapshot.data() as TripData;
+            emit();
           } else {
-            // First time in Firestore: seed initial data
-            const initial = loadLocalTripData();
-            setDoc(tripDocRef, initial)
-              .then(() => onData(initial))
-              .catch((err) => {
-                console.error('Error seeding initial Firestore trip:', err);
-                if (onError) onError(err);
-              });
+            // First time in Firestore: seed from what this device has.
+            seedTrip(tripId, loadLocalTripData()).catch(fail);
           }
         },
-        (error) => {
-          console.warn('Firestore subscription error (falling back to LocalStorage):', error);
-          if (onError) onError(error);
-          onData(loadLocalTripData());
-        }
+        fail
+      )
+    );
+
+    for (const list of TRIP_LISTS) {
+      unsubscribes.push(
+        onSnapshot(
+          collection(db, 'trips', tripId, list),
+          (snapshot) => {
+            lists.set(
+              list,
+              snapshot.docs.map((d) => d.data() as StoredItem)
+            );
+            emit();
+          },
+          fail
+        )
       );
-
-      authReady().then(() => {
-        if (!stopped) live = start();
-      });
-
-      return () => {
-        stopped = true;
-        live?.();
-      };
-    } catch (e) {
-      console.warn('Firestore subscription initialization failed:', e);
-      if (onError) onError(e);
     }
-  }
-
-  // LocalStorage broadcast listener across browser tabs!
-  const handleStorageEvent = (event: StorageEvent) => {
-    if (event.key === LOCAL_STORAGE_KEY && event.newValue) {
-      try {
-        onData(withDefaults(JSON.parse(event.newValue)));
-      } catch (err) {
-        console.error('Storage event parse error', err);
-      }
-    }
-  };
-  window.addEventListener('storage', handleStorageEvent);
-
-  // Initial local delivery
-  onData(loadLocalTripData());
+  });
 
   return () => {
-    window.removeEventListener('storage', handleStorageEvent);
+    stopped = true;
+    for (const stop of unsubscribes) stop();
   };
 }
 
-/**
- * Push this device's newer copy back up. Unlike a transaction — which needs a
- * live connection — a plain write is queued by Firestore and replayed on
- * reconnect, which is what makes the repair land at all.
- */
-let repairInFlight = false;
+/** Fields that describe the trip itself rather than a list on it. */
+const SCALAR_FIELDS = [
+  'id',
+  'title',
+  'tagline',
+  'destination',
+  'startDate',
+  'endDate',
+  'statusPhase',
+  'coverImage',
+  'confirmedAccommodation',
+] as const;
 
-function repairCloudCopy(tripDocRef: DocumentReference, local: TripData): void {
-  if (repairInFlight) return;
-  repairInFlight = true;
-  setDoc(tripDocRef, local)
-    .then(() => {
-      hasUnsyncedEdit = false;
+function scalarsOf(trip: Partial<TripData>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of SCALAR_FIELDS) {
+    const value = (trip as Record<string, unknown>)[key];
+    // These fields are merged into the trip document, and a merge leaves out
+    // what it is not given — so cancelling the villa has to be spelled out as
+    // a removal rather than passed along as `undefined`.
+    out[key] = value === undefined ? deleteField() : value;
+  }
+  return out;
+}
+
+/** Write a trip that Firestore has never seen, lists and all. */
+async function seedTrip(tripId: string, trip: TripData): Promise<void> {
+  const db = initFirebase();
+  if (!db) return;
+  await setDoc(doc(db, 'trips', tripId), scalarsOf(trip), { merge: true });
+  await Promise.all(
+    TRIP_LISTS.flatMap((list) => {
+      const items = ((trip as unknown as Record<string, unknown>)[list] ?? []) as StoredItem[];
+      return items.map((item) => saveTripItem(tripId, list, item));
     })
-    .catch((err) => console.warn('Could not push the local trip copy up:', err))
-    .finally(() => {
-      repairInFlight = false;
-    });
+  );
 }
 
 /**
- * A change to the trip: either a whole replacement (import, reset) or a
- * function describing the change. Prefer the function — it is applied to
- * whatever is stored at that moment, so two people saving at once keep both
- * edits instead of the later save overwriting the earlier one.
+ * Add an item to a list, or save a change to one already there.
  *
- * The function runs more than once (locally, then again inside the
- * transaction, then again on every retry), so it must be pure: build new ids
- * and timestamps before calling, not inside.
+ * The write names one document, so it cannot affect any other item, and it
+ * cannot remove anything.
+ *
+ * Within that one document the item is replaced, not merged, so clearing an
+ * optional field actually clears it — pass the whole item, not a patch. The
+ * item read back carries `__order`, and spreading it through an edit brings
+ * that along, which is why editing something does not move it in the list.
+ */
+export async function saveTripItem(
+  tripId: string,
+  list: TripListName,
+  item: StoredItem
+): Promise<void> {
+  const key = itemKey(list, item);
+  if (!key) {
+    console.warn(`Refusing to save an item with no id to ${list}`, item);
+    return;
+  }
+
+  const db = initFirebase();
+  if (!db) return;
+  await authReady();
+
+  const stored: StoredItem = { ...item, __order: item.__order ?? Date.now() };
+  await setDoc(doc(db, 'trips', tripId, list, key), stored);
+}
+
+/**
+ * Take an item off a list.
+ *
+ * The only way anything leaves a trip. Nothing disappears as a consequence of
+ * a sync, an older copy arriving, or a device catching up.
+ */
+export async function removeTripItem(
+  tripId: string,
+  list: TripListName,
+  itemId: string
+): Promise<void> {
+  const db = initFirebase();
+  if (!db) return;
+  await authReady();
+  await deleteDoc(doc(db, 'trips', tripId, list, itemId));
+}
+
+/**
+ * A change to the trip itself — its title, its phase, the villa once it is
+ * booked. Lists are not written here; they go item by item.
+ *
+ * The function form is applied to what this device currently holds. It runs
+ * more than once, so it must be pure: build ids and timestamps before calling.
  */
 export type TripUpdate = TripData | ((current: TripData) => TripData);
 
@@ -362,29 +476,13 @@ function applyUpdate(update: TripUpdate, current: TripData): TripData {
   return typeof update === 'function' ? update(current) : update;
 }
 
-/**
- * Apply a change and sync it.
- *
- * With Firestore, the change runs inside a transaction: read the newest
- * document, apply the change to that, write it back. Firestore retries the
- * whole thing if someone else wrote in between, so concurrent edits to
- * different parts of the trip both survive.
- *
- * Without Firestore, the change is applied to what is in local storage right
- * now rather than to the caller's copy, which keeps two browser tabs honest.
- */
 export async function persistTripData(
   tripId: string,
   update: TripUpdate
 ): Promise<TripData> {
-  // This device's own copy is written first, always. A transaction needs a
-  // live connection — offline it hangs rather than failing — and an edit must
-  // still survive a reload on a phone halfway up the mountain.
-  const previous = loadLocalTripData();
-  const local = {
-    ...applyUpdate(update, previous),
-    revision: revisionOf(previous) + 1,
-  };
+  // This device's own copy is written first, always — an edit must survive a
+  // reload on a phone halfway up the mountain.
+  const local = applyUpdate(update, loadLocalTripData());
   saveLocalTripData(local);
 
   const db = initFirebase();
@@ -392,35 +490,41 @@ export async function persistTripData(
 
   await authReady();
 
-  const tripDocRef = doc(db, 'trips', tripId);
+  // Only the trip's own fields, and merged, so a save here can never reach a
+  // list. Firestore queues this offline and replays it on reconnect.
+  await setDoc(doc(db, 'trips', tripId), scalarsOf(local), { merge: true });
+  return local;
+}
 
-  try {
-    const next = await runTransaction(db, async (tx) => {
-      const snapshot = await tx.get(tripDocRef);
-      const current = snapshot.exists()
-        ? withDefaults(snapshot.data() as TripData)
-        : loadLocalTripData();
+/**
+ * Replace the whole trip: importing a backup file, or resetting to the trip
+ * that ships with the build.
+ *
+ * The only write that removes items nobody asked to remove, and that is the
+ * point of it — somebody chose to replace the trip. Every other path adds and
+ * edits one item at a time and can take nothing away.
+ */
+export async function replaceTripData(tripId: string, trip: TripData): Promise<TripData> {
+  saveLocalTripData(trip);
 
-      const updated = {
-        ...applyUpdate(update, current),
-        // Past both what the cloud holds and what this device already counted,
-        // so neither side reads the result as stale.
-        revision: Math.max(revisionOf(current) + 1, revisionOf(local)),
-      };
-      tx.set(tripDocRef, updated);
-      return updated;
-    });
+  const db = initFirebase();
+  if (!db) return trip;
+  await authReady();
 
-    saveLocalTripData(next);
-    hasUnsyncedEdit = false;
-    return next;
-  } catch (e) {
-    console.error('Failed to sync to Firestore:', e);
-    // The edit is already on this device; only the cloud copy is behind. Say
-    // so, so the next snapshot pushes it up instead of discarding it.
-    hasUnsyncedEdit = true;
-    throw e;
+  await setDoc(doc(db, 'trips', tripId), scalarsOf(trip), { merge: true });
+
+  for (const list of TRIP_LISTS) {
+    const items = ((trip as unknown as Record<string, unknown>)[list] ?? []) as StoredItem[];
+    const keep = new Set(items.map((item) => itemKey(list, item)).filter(Boolean));
+
+    const existing = await getDocs(collection(db, 'trips', tripId, list));
+    await Promise.all(
+      existing.docs.filter((d) => !keep.has(d.id)).map((d) => deleteDoc(d.ref))
+    );
+    await Promise.all(items.map((item) => saveTripItem(tripId, list, item)));
   }
+
+  return trip;
 }
 
 export function exportTripToJson(data: TripData): string {

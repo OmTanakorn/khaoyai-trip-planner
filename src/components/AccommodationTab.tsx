@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, ExternalLink, X } from 'lucide-react';
-import { TripData, AccommodationOption, Room, Member } from '../types/trip';
+import { TripData, AccommodationOption, Room, Member, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Tag, Meter } from './ui';
 import { input, btnSolid, btnQuiet, btnBrass, btnLink, baht, voterLabel } from './ui-kit';
 
-interface AccommodationTabProps {
+interface AccommodationTabProps extends TripListEditor {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
   me: Member | null;
@@ -17,6 +17,8 @@ const FALLBACK_IMAGE =
 export const AccommodationTab: React.FC<AccommodationTabProps> = ({
   trip,
   onUpdateTrip,
+  onSaveItem,
+  onRemoveItem,
   me,
 }) => {
   const [isNewOptionModalOpen, setIsNewOptionModalOpen] = useState(false);
@@ -50,14 +52,13 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({
       .find((o) => o.id === optionId)
       ?.votes.includes(voter);
 
-    onUpdateTrip((t) => ({
-      ...t,
-      accommodationOptions: t.accommodationOptions.map((opt) => {
-        if (opt.id !== optionId) return opt;
-        const votes = opt.votes.filter((v) => v !== voter);
-        return { ...opt, votes: isAdding ? [...votes, voter] : votes };
-      }),
-    }));
+    const option = trip.accommodationOptions.find((o) => o.id === optionId);
+    if (!option) return;
+    const votes = option.votes.filter((v) => v !== voter);
+    onSaveItem('accommodationOptions', {
+      ...option,
+      votes: isAdding ? [...votes, voter] : votes,
+    });
   };
 
   const handleCreateOption = (e: React.FormEvent) => {
@@ -87,10 +88,7 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({
       votes: [],
     };
 
-    onUpdateTrip((t) => ({
-      ...t,
-      accommodationOptions: [...t.accommodationOptions, newOption],
-    }));
+    onSaveItem('accommodationOptions', newOption);
 
     setOptionName('');
     setOptionLocation('');
@@ -104,10 +102,7 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({
   const handleDeleteOption = (optionId: string) => {
     const opt = trip.accommodationOptions.find((o) => o.id === optionId);
     if (!window.confirm(`ลบ ${opt?.name ?? 'ตัวเลือกนี้'} ออกจากการโหวต?`)) return;
-    onUpdateTrip((t) => ({
-      ...t,
-      accommodationOptions: t.accommodationOptions.filter((o) => o.id !== optionId),
-    }));
+    onRemoveItem('accommodationOptions', optionId);
   };
 
   const handleFinalizeAccommodation = (e: React.FormEvent) => {

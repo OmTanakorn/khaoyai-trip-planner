@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ExternalLink } from 'lucide-react';
-import { TripData } from '../types/trip';
+import { TripData, TripListEditor } from '../types/trip';
 import {
   getFirebaseConfig,
   saveFirebaseConfig,
@@ -14,18 +14,19 @@ import { initialTripData } from '../data/initialData';
 import { Modal, Field } from './ui';
 import { input, btnSolid, btnQuiet } from './ui-kit';
 
-interface SyncModalProps {
+interface SyncModalProps extends TripListEditor {
   isOpen: boolean;
   onClose: () => void;
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
+  onReplaceTrip: (trip: TripData) => void;
 }
 
 export const SyncModal: React.FC<SyncModalProps> = ({
   isOpen,
   onClose,
   trip,
-  onUpdateTrip,
+  onReplaceTrip,
 }) => {
   const [configJson, setConfigJson] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -102,7 +103,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
       try {
         const content = event.target?.result as string;
         const imported = importTripFromJson(content);
-        onUpdateTrip(imported);
+        onReplaceTrip(imported);
         setStatusMessage('');
         onClose();
       } catch (err: any) {
@@ -114,7 +115,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({
 
   const handleResetData = () => {
     if (!window.confirm('ล้างข้อมูลทั้งหมดแล้วเริ่มจากทริปตัวอย่างใหม่?')) return;
-    onUpdateTrip(initialTripData);
+    onReplaceTrip(initialTripData);
     setStatusMessage('');
     onClose();
   };

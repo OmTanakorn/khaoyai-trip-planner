@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Pencil } from 'lucide-react';
-import { TripData, Expense, Member, Payment } from '../types/trip';
+import { TripData, Expense, Member, Payment, TripListEditor } from '../types/trip';
 import { PromptPayQR } from './PromptPayQR';
 import { SlipField } from './SlipField';
 import { Transfer } from '../services/settlement';
@@ -9,7 +9,7 @@ import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Meter } from './ui';
 import { input, btnSolid, btnQuiet, btnLink, baht } from './ui-kit';
 
-interface ExpensesTabProps {
+interface ExpensesTabProps extends TripListEditor {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
   me: Member | null;
@@ -23,7 +23,7 @@ const CATEGORY_LABEL: Record<Expense['category'], string> = {
   other: 'อื่น ๆ',
 };
 
-export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip, me }) => {
+export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRemoveItem, me }) => {
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
 
@@ -71,7 +71,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip, me
       slipId: paySlipId,
     };
 
-    onUpdateTrip((t) => ({ ...t, payments: [...(t.payments ?? []), payment] }));
+    onSaveItem('payments', payment);
     setPayingTransfer(null);
     setPaySlipId(undefined);
   };
@@ -86,10 +86,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip, me
     ) {
       return;
     }
-    onUpdateTrip((t) => ({
-      ...t,
-      payments: (t.payments ?? []).filter((p) => p.id !== paymentId),
-    }));
+    onRemoveItem('payments', paymentId);
   };
 
   const categoryTotals = trip.expenses.reduce(
@@ -131,14 +128,17 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip, me
     if (!title.trim() || !amount) return;
 
     if (editingExpense) {
-      onUpdateTrip((t) => ({
-        ...t,
-        expenses: t.expenses.map((exp) =>
-          exp.id === editingExpense.id
-            ? { ...exp, title, amount: Number(amount), payerId, category, notes, date, splitBetween, slipId: expenseSlipId }
-            : exp
-        ),
-      }));
+      onSaveItem('expenses', {
+        ...editingExpense,
+        title,
+        amount: Number(amount),
+        payerId,
+        category,
+        notes,
+        date,
+        splitBetween,
+        slipId: expenseSlipId,
+      });
     } else {
       const newExp: Expense = {
         id: `exp-${Date.now()}`,
@@ -151,7 +151,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip, me
         notes,
         slipId: expenseSlipId,
       };
-      onUpdateTrip((t) => ({ ...t, expenses: [...t.expenses, newExp] }));
+      onSaveItem('expenses', newExp);
     }
     setIsExpenseModalOpen(false);
   };
@@ -159,10 +159,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip, me
   const handleDeleteExpense = (expenseId: string) => {
     const exp = trip.expenses.find((e) => e.id === expenseId);
     if (!window.confirm(`ลบรายการ ${exp?.title ?? 'นี้'} ออกจากบัญชี?`)) return;
-    onUpdateTrip((t) => ({
-      ...t,
-      expenses: t.expenses.filter((e) => e.id !== expenseId),
-    }));
+    onRemoveItem('expenses', expenseId);
   };
 
   return (
@@ -296,12 +293,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip, me
                           slipId={payment.slipId}
                           uploadedBy={me?.nickname ?? 'เพื่อนร่วมทริป'}
                           onChange={(slipId) =>
-                            onUpdateTrip((t) => ({
-                              ...t,
-                              payments: (t.payments ?? []).map((p) =>
-                                p.id === payment.id ? { ...p, slipId } : p
-                              ),
-                            }))
+                            onSaveItem('payments', { ...payment, slipId })
                           }
                         />
                       </div>
@@ -384,12 +376,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onUpdateTrip, me
                           uploadedBy={me?.nickname ?? 'เพื่อนร่วมทริป'}
                           label="ใบเสร็จ"
                           onChange={(slipId) =>
-                            onUpdateTrip((t) => ({
-                              ...t,
-                              expenses: t.expenses.map((x) =>
-                                x.id === exp.id ? { ...x, slipId } : x
-                              ),
-                            }))
+                            onSaveItem('expenses', { ...exp, slipId })
                           }
                         />
                       </div>

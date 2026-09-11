@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Pencil, ExternalLink } from 'lucide-react';
-import { TripData, Activity, PlaceIdea, Member } from '../types/trip';
+import { TripData, Activity, PlaceIdea, Member, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty } from './ui';
 import { input, btnSolid, btnQuiet, btnLink } from './ui-kit';
 
-interface ItineraryTabProps {
+interface ItineraryTabProps extends TripListEditor {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
   me: Member | null;
@@ -33,7 +33,7 @@ const CATEGORY_LABEL: Record<Activity['category'] | PlaceIdea['category'], strin
   other: 'อื่น ๆ',
 };
 
-export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onUpdateTrip, me }) => {
+export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onSaveItem, onRemoveItem, me }) => {
   const [selectedDayNumber, setSelectedDayNumber] = useState(1);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [isWishlistModalOpen, setIsWishlistModalOpen] = useState(false);
@@ -100,25 +100,19 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onUpdateTrip, 
       notes,
     };
 
-    onUpdateTrip((t) => ({
-      ...t,
-      itinerary: t.itinerary.map((day) => {
-        if (day.dayNumber !== selectedDayNumber) return day;
-
-        if (editingActivity) {
-          return {
-            ...day,
-            activities: day.activities.map((a) =>
+    const day = trip.itinerary.find((d) => d.dayNumber === selectedDayNumber);
+    if (day) {
+      onSaveItem('itinerary', {
+        ...day,
+        activities: editingActivity
+          ? day.activities.map((a) =>
               a.id === editingActivity.id
                 ? { ...a, time, title, location, category, mapUrl, notes }
                 : a
-            ),
-          };
-        }
-
-        return { ...day, activities: [...day.activities, newAct] };
-      }),
-    }));
+            )
+          : [...day.activities, newAct],
+      });
+    }
     setIsActivityModalOpen(false);
   };
 
@@ -126,14 +120,13 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onUpdateTrip, 
     const act = currentDay?.activities.find((a) => a.id === activityId);
     if (!window.confirm(`ลบ ${act?.title ?? 'กิจกรรมนี้'} ออกจากตาราง?`)) return;
 
-    onUpdateTrip((t) => ({
-      ...t,
-      itinerary: t.itinerary.map((day) =>
-        day.dayNumber === selectedDayNumber
-          ? { ...day, activities: day.activities.filter((a) => a.id !== activityId) }
-          : day
-      ),
-    }));
+    const day = trip.itinerary.find((d) => d.dayNumber === selectedDayNumber);
+    if (day) {
+      onSaveItem('itinerary', {
+        ...day,
+        activities: day.activities.filter((a) => a.id !== activityId),
+      });
+    }
   };
 
   const handleSavePlaceIdea = (e: React.FormEvent) => {
@@ -151,7 +144,7 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onUpdateTrip, 
       notes: ideaNotes.trim(),
     };
 
-    onUpdateTrip((t) => ({ ...t, placeIdeas: [...t.placeIdeas, newIdea] }));
+    onSaveItem('placeIdeas', newIdea);
 
     setIdeaTitle('');
     setIdeaLocation('');
@@ -167,21 +160,14 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onUpdateTrip, 
       .find((i) => i.id === ideaId)
       ?.votes.includes(voter);
 
-    onUpdateTrip((t) => ({
-      ...t,
-      placeIdeas: t.placeIdeas.map((idea) => {
-        if (idea.id !== ideaId) return idea;
-        const votes = idea.votes.filter((v) => v !== voter);
-        return { ...idea, votes: isAdding ? [...votes, voter] : votes };
-      }),
-    }));
+    const idea = trip.placeIdeas.find((i) => i.id === ideaId);
+    if (!idea) return;
+    const votes = idea.votes.filter((v) => v !== voter);
+    onSaveItem('placeIdeas', { ...idea, votes: isAdding ? [...votes, voter] : votes });
   };
 
   const handleDeletePlaceIdea = (ideaId: string) => {
-    onUpdateTrip((t) => ({
-      ...t,
-      placeIdeas: t.placeIdeas.filter((i) => i.id !== ideaId),
-    }));
+    onRemoveItem('placeIdeas', ideaId);
   };
 
   const handleMoveIdeaToItinerary = (idea: PlaceIdea, dayNum: number) => {
@@ -195,12 +181,8 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onUpdateTrip, 
       notes: idea.notes,
     };
 
-    onUpdateTrip((t) => ({
-      ...t,
-      itinerary: t.itinerary.map((day) =>
-        day.dayNumber === dayNum ? { ...day, activities: [...day.activities, newAct] } : day
-      ),
-    }));
+    const day = trip.itinerary.find((d) => d.dayNumber === dayNum);
+    if (day) onSaveItem('itinerary', { ...day, activities: [...day.activities, newAct] });
     // Jump to the day it landed on, so the change is visible rather than announced.
     setSelectedDayNumber(dayNum);
   };

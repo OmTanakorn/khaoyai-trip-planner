@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { Check, Plus, Trash2 } from 'lucide-react';
-import { TripData, PackingItem } from '../types/trip';
+import { TripData, PackingItem, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Empty, Meter } from './ui';
 import { input, btnSolid } from './ui-kit';
 
-interface PackingTabProps {
+interface PackingTabProps extends TripListEditor {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
 }
 
-export const PackingTab: React.FC<PackingTabProps> = ({ trip, onUpdateTrip }) => {
+export const PackingTab: React.FC<PackingTabProps> = ({ trip, onSaveItem, onRemoveItem }) => {
   const [newItemTitle, setNewItemTitle] = useState('');
   const [newItemCategory, setNewItemCategory] = useState<'shared' | 'personal'>('shared');
   const [newItemAssignedTo, setNewItemAssignedTo] = useState('');
@@ -25,19 +25,14 @@ export const PackingTab: React.FC<PackingTabProps> = ({ trip, onUpdateTrip }) =>
   const handleTogglePacked = (itemId: string) => {
     const item = trip.packingList.find((i) => i.id === itemId);
     const isPacked = !item?.isPacked;
-    onUpdateTrip((t) => ({
-      ...t,
-      packingList: t.packingList.map((i) => (i.id === itemId ? { ...i, isPacked } : i)),
-    }));
+    const packed = trip.packingList.find((i) => i.id === itemId);
+    if (packed) onSaveItem('packingList', { ...packed, isPacked });
   };
 
   const handleAssignMember = (itemId: string, memberId: string) => {
-    onUpdateTrip((t) => ({
-      ...t,
-      packingList: t.packingList.map((item) =>
-        item.id === itemId ? { ...item, assignedMemberId: memberId || undefined } : item
-      ),
-    }));
+    const assigned = trip.packingList.find((i) => i.id === itemId);
+    if (assigned)
+      onSaveItem('packingList', { ...assigned, assignedMemberId: memberId || undefined });
   };
 
   const handleAddItem = (e: React.FormEvent) => {
@@ -53,15 +48,12 @@ export const PackingTab: React.FC<PackingTabProps> = ({ trip, onUpdateTrip }) =>
       isPacked: false,
     };
 
-    onUpdateTrip((t) => ({ ...t, packingList: [...t.packingList, newItem] }));
+    onSaveItem('packingList', newItem);
     setNewItemTitle('');
   };
 
   const handleDeleteItem = (itemId: string) => {
-    onUpdateTrip((t) => ({
-      ...t,
-      packingList: t.packingList.filter((item) => item.id !== itemId),
-    }));
+    onRemoveItem('packingList', itemId);
   };
 
   const filteredItems = trip.packingList.filter((item) =>
