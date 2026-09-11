@@ -14,7 +14,9 @@ export const PackingTab: React.FC<PackingTabProps> = ({ trip, onSaveItem, onRemo
   const [newItemTitle, setNewItemTitle] = useState('');
   const [newItemCategory, setNewItemCategory] = useState<'shared' | 'personal'>('shared');
   const [newItemAssignedTo, setNewItemAssignedTo] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'shared' | 'personal'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'shared' | 'personal' | 'menu'>(
+    'all'
+  );
 
   const sharedItems = trip.packingList.filter((item) => item.category === 'shared');
   const personalItems = trip.packingList.filter((item) => item.category === 'personal');
@@ -56,14 +58,25 @@ export const PackingTab: React.FC<PackingTabProps> = ({ trip, onSaveItem, onRemo
     onRemoveItem('packingList', itemId);
   };
 
-  const filteredItems = trip.packingList.filter((item) =>
-    activeFilter === 'all' ? true : item.category === activeFilter
-  );
+  const fromMenuItems = trip.packingList.filter((item) => item.fromMenuId);
+
+  const filteredItems = trip.packingList.filter((item) => {
+    if (activeFilter === 'all') return true;
+    if (activeFilter === 'menu') return !!item.fromMenuId;
+    return item.category === activeFilter;
+  });
+
+  /** The dish an item was broken out of, so its row can say where it came from. */
+  const menuTitleOf = (menuId?: string) =>
+    menuId ? (trip.menuIdeas ?? []).find((m) => m.id === menuId)?.title : undefined;
 
   const filters = [
     { id: 'all' as const, label: 'ทั้งหมด', count: trip.packingList.length },
     { id: 'shared' as const, label: 'ของกองกลาง', count: sharedItems.length },
     { id: 'personal' as const, label: 'ของส่วนตัว', count: personalItems.length },
+    ...(fromMenuItems.length > 0
+      ? [{ id: 'menu' as const, label: 'ของทำกับข้าว', count: fromMenuItems.length }]
+      : []),
   ];
 
   return (
@@ -151,7 +164,11 @@ export const PackingTab: React.FC<PackingTabProps> = ({ trip, onSaveItem, onRemo
         {filteredItems.length === 0 ? (
           <Empty
             title="ยังไม่มีของในหมวดนี้"
-            note="พิมพ์ของที่นึกออกในช่องด้านบน แล้วเลือกว่าใครหิ้วมา"
+            note={
+              activeFilter === 'menu'
+                ? 'ของหมวดนี้มาจากหน้าเมนูอาหาร กดแตกเมนูที่ผ่านโหวตแล้วของจะมาโผล่ที่นี่'
+                : 'พิมพ์ของที่นึกออกในช่องด้านบน แล้วเลือกว่าใครหิ้วมา'
+            }
           />
         ) : (
           <ul className="divide-y divide-mist-deep">
@@ -181,8 +198,9 @@ export const PackingTab: React.FC<PackingTabProps> = ({ trip, onSaveItem, onRemo
                   >
                     {item.title}
                   </p>
-                  <p className="text-fine text-stone">
+                  <p className="text-fine text-stone truncate">
                     {item.category === 'shared' ? 'ของกองกลาง' : 'ของส่วนตัว'}
+                    {menuTitleOf(item.fromMenuId) && ` · สำหรับ ${menuTitleOf(item.fromMenuId)}`}
                   </p>
                 </div>
 

@@ -98,6 +98,12 @@ export interface MenuIdea {
   meal: 'dinner' | 'breakfast' | 'latenight' | 'anytime';
   /** Rough baht per head, used only to sketch the food budget. */
   estimatedPerHead?: number;
+  /**
+   * What has to be bought or carried up the hill for this dish. Kept on the
+   * dish rather than typed into the packing list twice, so a menu that wins
+   * the vote can turn itself into shopping.
+   */
+  ingredients?: string[];
   suggestedBy: string;
   votes: string[]; // member ids who want this dish
   notes?: string;
@@ -153,6 +159,8 @@ export interface PackingItem {
   category: 'shared' | 'personal';
   assignedMemberId?: string;
   isPacked: boolean;
+  /** Set when the item was broken out of a dish on the menu. */
+  fromMenuId?: string;
 }
 
 export interface Announcement {

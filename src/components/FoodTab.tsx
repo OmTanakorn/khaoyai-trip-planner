@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import { TripData, MenuIdea, Member, TripListEditor } from '../types/trip';
+import { TripData, MenuIdea, Member, PackingItem, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Meter } from './ui';
 import { input, btnSolid, btnQuiet, btnLink, baht, voterLabel } from './ui-kit';
@@ -27,6 +27,19 @@ const MEAL_LABEL: Record<MenuIdea['meal'], string> = {
   anytime: 'กินตอนไหนก็ได้',
 };
 
+/**
+ * The ingredient box is free text — one thing per line is how people write a
+ * shopping list anyway. Blank lines and stray spaces go, and an empty box
+ * clears the field rather than storing an empty array.
+ */
+const parseIngredients = (text: string): string[] | undefined => {
+  const lines = text
+    .split('\n')
+    .map((line) => line.replace(/^[-•*\s]+/, '').trim())
+    .filter(Boolean);
+  return lines.length > 0 ? lines : undefined;
+};
+
 /** The order the sittings actually happen, so the groups read as a timeline. */
 const MEAL_ORDER: MenuIdea['meal'][] = ['dinner', 'latenight', 'breakfast', 'anytime'];
 
@@ -40,6 +53,7 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
   const [perHead, setPerHead] = useState('');
   const [suggestedBy, setSuggestedBy] = useState('');
   const [notes, setNotes] = useState('');
+  const [ingredients, setIngredients] = useState('');
 
   const menuIdeas = trip.menuIdeas ?? [];
   const eaters = trip.members.filter((m) => m.status === 'confirmed').length;
@@ -62,6 +76,7 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
     setPerHead('');
     setSuggestedBy(me?.nickname ?? '');
     setNotes('');
+    setIngredients('');
     setIsMenuModalOpen(true);
   };
 
@@ -73,6 +88,7 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
     setPerHead(item.estimatedPerHead ? String(item.estimatedPerHead) : '');
     setSuggestedBy(item.suggestedBy);
     setNotes(item.notes ?? '');
+    setIngredients((item.ingredients ?? []).join('\n'));
     setIsMenuModalOpen(true);
   };
 
@@ -91,6 +107,9 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
       // out — a price someone cleared has to actually go.
       estimatedPerHead:
         perHead.trim() && Number.isFinite(price) && price > 0 ? price : undefined,
+      // One thing per line, blank lines dropped. Cleared box means no list,
+      // same rule as the price.
+      ingredients: parseIngredients(ingredients),
     };
 
     onSaveItem(
@@ -120,6 +139,54 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
     onRemoveItem('menuIdeas', menuId);
   };
 
+  /**
+   * Turning a dish into shopping.
+   *
+   * The packing list is the one place the group actually reads before leaving,
+   * so a dish that won the vote has to end up there rather than staying a
+   * name on this page. Each item remembers the dish it came from, which is
+   * what keeps a second press from writing everything twice.
+   */
+  const packingFromMenu = (menuId: string) =>
+    trip.packingList.filter((p) => p.fromMenuId === menuId);
+
+  const pendingFor = (item: MenuIdea) => {
+    const already = new Set(packingFromMenu(item.id).map((p) => p.title));
+    return (item.ingredients ?? []).filter((name) => !already.has(name));
+  };
+
+  const sendToPacking = (items: MenuIdea[]) => {
+    let n = 0;
+    for (const item of items) {
+      for (const name of pendingFor(item)) {
+        const packed: PackingItem = {
+          // Date.now() alone repeats inside one loop, and two items sharing an
+          // id would overwrite each other on the way to the cloud.
+          id: `p-${Date.now()}-${n}`,
+          title: name,
+          category: 'shared',
+          isPacked: false,
+          fromMenuId: item.id,
+        };
+        onSaveItem('packingList', packed);
+        n += 1;
+      }
+    }
+  };
+
+  const takeBackFromPacking = (item: MenuIdea) => {
+    const mine = packingFromMenu(item.id);
+    const packed = mine.filter((p) => p.isPacked).length;
+    const message =
+      packed > 0
+        ? `เอาของจาก ${item.title} ออกจากรายการเตรียมของ? มี ${packed} อย่างที่เตรียมไว้แล้ว จะถูกเอาออกด้วย`
+        : `เอาของ ${mine.length} อย่างจาก ${item.title} ออกจากรายการเตรียมของ?`;
+    if (!window.confirm(message)) return;
+    mine.forEach((p) => onRemoveItem('packingList', p.id));
+  };
+
+  const shortlistPending = shortlisted.reduce((n, m) => n + pendingFor(m).length, 0);
+
   const groups = MEAL_ORDER.map((mealKey) => ({
     meal: mealKey,
     items: menuIdeas
@@ -132,7 +199,7 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
     <div className="pb-16">
       <PageHead
         title="เมนูอาหาร"
-        note="เสนอเมนูที่อยากกิน แล้วโหวตกัน เมนูที่คนอยากกินเกินครึ่งจะขึ้นเป็นรายการซื้อของ"
+        note="เสนอเมนูที่อยากกิน แล้วโหวตกัน เมนูที่คนอยากกินเกินครึ่งถือว่าจะทำ กดแตกเป็นของที่ต้องเตรียมได้เลย"
         action={
           <button onClick={openNewModal} className={btnSolid}>
             เสนอเมนู
@@ -171,6 +238,23 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
             </p>
           </div>
         </div>
+
+        {shortlisted.length > 0 && (
+          <div className="mt-8 pt-6 border-t border-mist-deep flex flex-wrap items-center justify-between gap-4">
+            <p className="text-fine text-stone max-w-md">
+              {shortlistPending > 0
+                ? `เมนูที่ผ่านโหวตมีของที่ยังไม่ได้เข้ารายการเตรียมของอีก ${shortlistPending} อย่าง`
+                : 'ของจากเมนูที่ผ่านโหวตเข้ารายการเตรียมของครบแล้ว'}
+            </p>
+            <button
+              onClick={() => sendToPacking(shortlisted)}
+              disabled={shortlistPending === 0}
+              className={`${btnSolid} shrink-0`}
+            >
+              แตกเป็นของที่ต้องเตรียม {shortlistPending > 0 ? shortlistPending : ''}
+            </button>
+          </div>
+        )}
       </Panel>
 
       {menuIdeas.length === 0 ? (
@@ -262,6 +346,55 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
                         />
                       </div>
                     </div>
+
+                    {/* What this dish turns into once it is decided. */}
+                    {(() => {
+                      const list = item.ingredients ?? [];
+                      const inPacking = packingFromMenu(item.id);
+                      const pending = pendingFor(item);
+
+                      if (list.length === 0) {
+                        return isShortlisted ? (
+                          <p className="mt-4 text-fine text-stone">
+                            เมนูนี้จะทำแล้ว แต่ยังไม่ได้ใส่ว่าต้องซื้ออะไรบ้าง{' '}
+                            <button
+                              onClick={() => openEditModal(item)}
+                              className="text-ink border-b border-brass pb-0.5 hover:text-brass transition-colors"
+                            >
+                              ใส่ของที่ต้องเตรียม
+                            </button>
+                          </p>
+                        ) : null;
+                      }
+
+                      return (
+                        <div className="mt-4 pt-4 border-t border-mist-deep">
+                          <p className="text-fine text-stone">
+                            ต้องเตรียม {list.length} อย่าง · {list.join(', ')}
+                          </p>
+                          <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
+                            {pending.length > 0 ? (
+                              <button onClick={() => sendToPacking([item])} className={btnLink}>
+                                <Plus className="w-3.5 h-3.5" />
+                                แตกเป็นของที่ต้องเตรียม {pending.length} อย่าง
+                              </button>
+                            ) : (
+                              <span className="text-fine text-stone">
+                                อยู่ในรายการเตรียมของแล้ว {inPacking.length} อย่าง
+                              </span>
+                            )}
+                            {inPacking.length > 0 && (
+                              <button
+                                onClick={() => takeBackFromPacking(item)}
+                                className="text-fine text-stone hover:text-ink transition-colors"
+                              >
+                                เอาออกจากรายการ
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </li>
                 );
               })}
@@ -349,6 +482,21 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
                 />
               </Field>
             </div>
+
+            <Field
+              label="ของที่ต้องเตรียม"
+              htmlFor="menu-ingredients"
+              hint="บรรทัดละอย่าง พอเมนูนี้ผ่านโหวตแล้วกดแตกเป็นรายการเตรียมของได้เลย"
+            >
+              <textarea
+                id="menu-ingredients"
+                rows={4}
+                value={ingredients}
+                onChange={(e) => setIngredients(e.target.value)}
+                placeholder={'คอหมู 2 กิโล\nน้ำจิ้มแจ่ว\nถ่าน 1 ถุง'}
+                className={input}
+              />
+            </Field>
 
             <Field label="โน้ต" htmlFor="menu-notes">
               <textarea
