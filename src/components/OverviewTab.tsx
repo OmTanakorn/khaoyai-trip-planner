@@ -177,6 +177,11 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       title: 'ปักหมุดคาเฟ่และร้านอาหาร',
       detail: 'เสนอจุดแวะระหว่างทาง แล้วโหวตกัน',
     },
+    {
+      tab: 'food',
+      title: 'โหวตเมนูอาหาร',
+      detail: 'เสนอเมนูมื้อเย็นและมื้อเช้า แล้วโหวตก่อนไปซื้อของ',
+    },
   ];
 
   return (

@@ -85,6 +85,24 @@ export interface PlaceIdea {
   notes?: string;
 }
 
+/**
+ * A dish someone wants on the trip's table. Candidates only — the group votes,
+ * the ones with the most votes get bought. `votes` holds member ids, same as
+ * `PlaceIdea`.
+ */
+export interface MenuIdea {
+  id: string;
+  title: string;
+  category: 'grill' | 'main' | 'snack' | 'drink' | 'dessert' | 'other';
+  /** Which sitting this is for. */
+  meal: 'dinner' | 'breakfast' | 'latenight' | 'anytime';
+  /** Rough baht per head, used only to sketch the food budget. */
+  estimatedPerHead?: number;
+  suggestedBy: string;
+  votes: string[]; // member ids who want this dish
+  notes?: string;
+}
+
 export interface Activity {
   id: string;
   time: string;
@@ -158,6 +176,7 @@ export interface TripData {
   accommodationOptions: AccommodationOption[];
   confirmedAccommodation?: Accommodation;
   placeIdeas: PlaceIdea[];
+  menuIdeas: MenuIdea[];
   itinerary: ItineraryDay[];
   expenses: Expense[];
   payments?: Payment[];

@@ -4,6 +4,7 @@ import { OverviewTab } from './components/OverviewTab';
 import { CarsTab } from './components/CarsTab';
 import { AccommodationTab } from './components/AccommodationTab';
 import { ItineraryTab } from './components/ItineraryTab';
+import { FoodTab } from './components/FoodTab';
 import { ExpensesTab } from './components/ExpensesTab';
 import { PackingTab } from './components/PackingTab';
 import { MembersTab } from './components/MembersTab';
@@ -118,6 +119,14 @@ export function App() {
 
         {activeTab === 'itinerary' && (
           <ItineraryTab
+            trip={trip}
+            onUpdateTrip={handleUpdateTrip}
+            me={me}
+          />
+        )}
+
+        {activeTab === 'food' && (
+          <FoodTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
             me={me}

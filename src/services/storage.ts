@@ -29,6 +29,15 @@ const BUILD_OWNED_FIELDS = {
 
 const FIREBASE_CONFIG_KEY = 'khaoyai_firebase_config';
 
+/**
+ * A trip stored before a field existed comes back without it, and screens then
+ * map over `undefined`. Fill anything missing from the shipped defaults and
+ * re-apply the build-owned fields on top.
+ */
+function withDefaults(data: Partial<TripData>): TripData {
+  return { ...initialTripData, ...data, ...BUILD_OWNED_FIELDS };
+}
+
 export interface FirebaseConfig {
   apiKey: string;
   authDomain: string;
@@ -142,7 +151,7 @@ export function loadLocalTripData(): TripData {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...initialTripData, ...parsed, ...BUILD_OWNED_FIELDS };
+      return withDefaults(parsed);
     }
   } catch (e) {
     console.warn('Error reading local trip data', e);
@@ -173,10 +182,7 @@ export function subscribeToTrip(
         tripDocRef,
         (snapshot) => {
           if (snapshot.exists()) {
-            const data = {
-              ...(snapshot.data() as TripData),
-              ...BUILD_OWNED_FIELDS,
-            };
+            const data = withDefaults(snapshot.data() as TripData);
             saveLocalTripData(data);
             onData(data);
           } else {
@@ -207,7 +213,7 @@ export function subscribeToTrip(
   const handleStorageEvent = (event: StorageEvent) => {
     if (event.key === LOCAL_STORAGE_KEY && event.newValue) {
       try {
-        onData(JSON.parse(event.newValue));
+        onData(withDefaults(JSON.parse(event.newValue)));
       } catch (err) {
         console.error('Storage event parse error', err);
       }
@@ -268,7 +274,7 @@ export async function persistTripData(
     const next = await runTransaction(db, async (tx) => {
       const snapshot = await tx.get(tripDocRef);
       const current = snapshot.exists()
-        ? { ...(snapshot.data() as TripData), ...BUILD_OWNED_FIELDS }
+        ? withDefaults(snapshot.data() as TripData)
         : loadLocalTripData();
 
       const updated = applyUpdate(update, current);
@@ -296,6 +302,7 @@ export function importTripFromJson(jsonStr: string): TripData {
   if (!parsed.id || !parsed.title || !Array.isArray(parsed.members)) {
     throw new Error('รูปแบบไฟล์ JSON ไม่ถูกต้อง');
   }
-  saveLocalTripData(parsed);
-  return parsed;
+  const trip = withDefaults(parsed);
+  saveLocalTripData(trip);
+  return trip;
 }
