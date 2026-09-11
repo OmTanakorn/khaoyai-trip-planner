@@ -11,6 +11,8 @@ import {
   Firestore,
   DocumentReference,
 } from 'firebase/firestore';
+import { getAuth, signInAnonymously } from 'firebase/auth';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 import { TripData } from '../types/trip';
 import { initialTripData } from '../data/initialData';
 
@@ -146,6 +148,41 @@ export function getDb(): Firestore | null {
   return initFirebase();
 }
 
+/** Where slip photos live, or null when the trip is device-only. */
+export function getBucket(): FirebaseStorage | null {
+  if (!initFirebase() || !firebaseApp) return null;
+  return getStorage(firebaseApp);
+}
+
+let signInAttempt: Promise<void> | null = null;
+
+/**
+ * Sign this browser in, silently.
+ *
+ * The trip has no accounts and nobody should be asked for one — but the
+ * security rules will not hand out the trip to an anonymous request, so the
+ * SDK takes an anonymous identity in the background before the first read.
+ * Firebase persists it, so the same device keeps the same uid across visits.
+ *
+ * A failure here is not fatal: the device still has its own copy, and the
+ * screens stay editable. Only the shared copy goes out of reach.
+ */
+export function authReady(): Promise<void> {
+  if (signInAttempt) return signInAttempt;
+
+  const app = firebaseApp ?? (initFirebase() ? firebaseApp : null);
+  if (!app) return Promise.resolve();
+
+  const auth = getAuth(app);
+  signInAttempt = (
+    auth.currentUser ? Promise.resolve() : signInAnonymously(auth).then(() => undefined)
+  ).catch((err) => {
+    console.warn('Anonymous sign-in failed; staying on this device only:', err);
+  });
+
+  return signInAttempt;
+}
+
 // Local Storage helpers
 export function loadLocalTripData(): TripData {
   try {
@@ -181,8 +218,16 @@ export function subscribeToTrip(
 
   if (db) {
     try {
+      // Signing in is a round trip, and the rules turn away whatever arrives
+      // before it lands. Put this device's copy on screen meanwhile so the
+      // trip is never blank while that happens.
+      onData(loadLocalTripData());
+
+      let live: (() => void) | null = null;
+      let stopped = false;
+
       const tripDocRef = doc(db, 'trips', tripId);
-      const unsubscribe = onSnapshot(
+      const start = () => onSnapshot(
         tripDocRef,
         (snapshot) => {
           if (snapshot.exists()) {
@@ -218,7 +263,15 @@ export function subscribeToTrip(
           onData(loadLocalTripData());
         }
       );
-      return unsubscribe;
+
+      authReady().then(() => {
+        if (!stopped) live = start();
+      });
+
+      return () => {
+        stopped = true;
+        live?.();
+      };
     } catch (e) {
       console.warn('Firestore subscription initialization failed:', e);
       if (onError) onError(e);
@@ -305,6 +358,8 @@ export async function persistTripData(
 
   const db = initFirebase();
   if (!db) return local;
+
+  await authReady();
 
   const tripDocRef = doc(db, 'trips', tripId);
 

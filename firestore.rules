@@ -1,0 +1,53 @@
+rules_version = '2';
+
+/*
+ * Nobody signs up for this trip, so there is no account to check against.
+ * Every browser takes an anonymous identity instead (see `authReady` in
+ * src/services/storage.ts), which is enough to close the door on the open
+ * internet — the project id ships in a public repo — without putting a login
+ * screen in front of friends who were handed a link.
+ *
+ * This is a lock, not a vault: anyone holding the public config can mint an
+ * anonymous identity too. What it buys is that the trip cannot be scraped or
+ * wiped by something that never opened the app.
+ */
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Legacy slips are base64 in the document. Keep them under the 1 MiB
+    // ceiling; slips written since the bucket exists carry only a url.
+    function slipIsSmall() {
+      return !('image' in request.resource.data)
+        || request.resource.data.image.size() < 900000;
+    }
+
+    match /trips/{tripId} {
+      allow read: if signedIn();
+
+      // Every edit writes the whole trip back as one document, so the finest
+      // this can get is "what arrived is still this trip".
+      allow create, update: if signedIn()
+        && request.resource.data.id == tripId
+        && request.resource.data.title is string
+        && request.resource.data.members is list;
+
+      // Nothing in the app deletes a trip, so nothing may.
+      allow delete: if false;
+
+      match /slips/{slipId} {
+        allow read: if signedIn();
+        allow create, update: if signedIn() && slipIsSmall();
+        allow delete: if signedIn();
+      }
+    }
+
+    // The app touches nothing outside a trip.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

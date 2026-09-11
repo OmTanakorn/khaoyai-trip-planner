@@ -1,0 +1,20 @@
+rules_version = '2';
+
+/*
+ * Slip photos, and nothing else. The size and type limits are what stop the
+ * bucket being used as somebody's free file host — the trip itself only ever
+ * puts a shrunk JPEG here (see compressImage in src/services/slips.ts).
+ */
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /trips/{tripId}/slips/{slipId} {
+      allow read: if request.auth != null;
+
+      allow create, update: if request.auth != null
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+
+      allow delete: if request.auth != null;
+    }
+  }
+}

@@ -56,8 +56,10 @@ export const SlipField: React.FC<SlipFieldProps> = ({
     try {
       const compressed = await compressImage(file);
       const id = `slip-${Date.now()}`;
-      await saveSlip(tripId, id, compressed, uploadedBy);
-      setLoaded({ id, image: compressed });
+      // What comes back is what displays it: the uploaded photo's URL, or a
+      // data URL when there was no signal to upload it with.
+      const image = await saveSlip(tripId, id, compressed, uploadedBy);
+      setLoaded({ id, image });
       onChange(id);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'เก็บสลิปไม่สำเร็จ');
