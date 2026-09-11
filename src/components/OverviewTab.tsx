@@ -57,7 +57,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       id: `an-${Date.now()}`,
       text: newAnnouncement.trim(),
       date: new Date().toISOString().split('T')[0],
-      author: announcementAuthor.trim() || 'เพื่อนร่วมทริป',
+      author: me?.nickname || announcementAuthor.trim() || 'เพื่อนร่วมทริป',
     };
 
     onUpdateTrip((t) => ({
@@ -290,13 +290,22 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                 className="w-full text-body p-3 rounded-ctl border border-mist-deep bg-mist/40 focus:outline-none focus:border-brass"
               />
               <div className="flex items-center justify-between gap-3">
-                <input
-                  type="text"
-                  value={announcementAuthor}
-                  onChange={(e) => setAnnouncementAuthor(e.target.value)}
-                  placeholder="ชื่อผู้โพสต์"
-                  className="text-fine py-2 px-3 bg-mist/40 border border-mist-deep rounded-ctl w-40 focus:outline-none focus:border-brass"
-                />
+                {/* This device already said who it belongs to at the welcome
+                    gate — asking for the name again invites a second spelling
+                    of the same person on the board. */}
+                {me ? (
+                  <p className="text-fine text-stone">
+                    โพสต์ในชื่อ <span className="text-ink">{me.nickname}</span>
+                  </p>
+                ) : (
+                  <input
+                    type="text"
+                    value={announcementAuthor}
+                    onChange={(e) => setAnnouncementAuthor(e.target.value)}
+                    placeholder="ชื่อผู้โพสต์"
+                    className="text-fine py-2 px-3 bg-mist/40 border border-mist-deep rounded-ctl w-40 focus:outline-none focus:border-brass"
+                  />
+                )}
                 <button
                   type="submit"
                   disabled={!newAnnouncement.trim()}

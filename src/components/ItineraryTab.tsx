@@ -53,6 +53,13 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onUpdateTrip, 
   const [ideaSuggestedBy, setIdeaSuggestedBy] = useState('');
   const [ideaNotes, setIdeaNotes] = useState('');
 
+  // The welcome gate already asked who this device belongs to; the wishlist
+  // form starts from that name instead of asking for a second spelling of it.
+  const openWishlistModal = () => {
+    setIdeaSuggestedBy(me?.nickname ?? '');
+    setIsWishlistModalOpen(true);
+  };
+
   const rawDay =
     trip.itinerary.find((d) => d.dayNumber === selectedDayNumber) || trip.itinerary[0];
 
@@ -146,7 +153,7 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onUpdateTrip, 
       category: ideaCategory,
       location: ideaLocation.trim(),
       mapUrl: ideaMapUrl.trim(),
-      suggestedBy: ideaSuggestedBy.trim() || 'เพื่อนร่วมทริป',
+      suggestedBy: ideaSuggestedBy.trim() || me?.nickname || 'เพื่อนร่วมทริป',
       votes: [],
       notes: ideaNotes.trim(),
     };
@@ -212,7 +219,7 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onUpdateTrip, 
         note="สองวันหนึ่งคืน เสนอที่ที่อยากไปไว้ก่อน แล้วค่อยดึงลงตารางเมื่อตกลงกันได้"
         action={
           <div className="flex gap-3">
-            <button onClick={() => setIsWishlistModalOpen(true)} className={btnQuiet}>
+            <button onClick={openWishlistModal} className={btnQuiet}>
               เสนอที่เที่ยว
             </button>
             <button onClick={handleOpenNewActivityModal} className={btnSolid}>
@@ -234,7 +241,7 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onUpdateTrip, 
             title="ยังไม่มีใครเสนอที่เที่ยว"
             note="ไร่องุ่น PB Valley, อุทยานแห่งชาติเขาใหญ่, คาเฟ่แถวถนนธนะรัชต์ หรือที่ไหนก็ได้ที่อยากแวะ"
             action={
-              <button onClick={() => setIsWishlistModalOpen(true)} className={btnLink}>
+              <button onClick={openWishlistModal} className={btnLink}>
                 <Plus className="w-3.5 h-3.5" />
                 เสนอที่แรก
               </button>
