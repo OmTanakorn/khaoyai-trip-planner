@@ -64,3 +64,27 @@ export function resolveMe(
   if (!identity.nickname) return null;
   return members.find((m) => normalise(m.nickname) === normalise(identity.nickname)) ?? null;
 }
+
+/**
+ * "Let me look around first" — remembered for this tab only, so the next
+ * visit asks again. Skipping is not an identity; it just stops the nagging
+ * inside one sitting.
+ */
+const GUEST_KEY = 'khaoyai_browsing_as_guest';
+
+export function isBrowsingAsGuest(): boolean {
+  try {
+    return sessionStorage.getItem(GUEST_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setBrowsingAsGuest(value: boolean): void {
+  try {
+    if (value) sessionStorage.setItem(GUEST_KEY, '1');
+    else sessionStorage.removeItem(GUEST_KEY);
+  } catch {
+    // A browser that refuses session storage just asks again. Not worth failing.
+  }
+}

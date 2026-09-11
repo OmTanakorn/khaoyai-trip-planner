@@ -23,8 +23,11 @@ import {
   getMyIdentity,
   rememberMyIdentity,
   resolveMe,
+  isBrowsingAsGuest,
+  setBrowsingAsGuest,
   DeviceIdentity,
 } from './services/identity';
+import { WelcomeGate } from './components/WelcomeGate';
 
 export function App() {
   const [trip, setTrip] = useState<TripData>(initialTripData);
@@ -33,6 +36,11 @@ export function App() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [myIdentity, setMyIdentity] = useState<DeviceIdentity | null>(getMyIdentity);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [isGuest, setIsGuest] = useState(isBrowsingAsGuest);
+  // The stored trip arrives a moment after the first paint. Until it does we
+  // cannot tell a first-time visitor from someone whose member has not loaded
+  // yet, so hold the question rather than flash it at a returning friend.
+  const [isTripLoaded, setIsTripLoaded] = useState(false);
   const isFirebase = isFirebaseConnected();
 
   const me = resolveMe(trip.members, myIdentity);
@@ -45,6 +53,15 @@ export function App() {
     const identity = member ? { id: member.id, nickname: member.nickname } : null;
     rememberMyIdentity(identity);
     setMyIdentity(identity);
+    // Dropping the name puts the question back, rather than leaving the app in
+    // a state where nothing can be voted on and nothing explains why.
+    setBrowsingAsGuest(false);
+    setIsGuest(false);
+  };
+
+  const browseAsGuest = () => {
+    setBrowsingAsGuest(true);
+    setIsGuest(true);
   };
 
   // The remembered id goes stale when the trip is re-imported, and the
@@ -63,9 +80,11 @@ export function App() {
       'khaoyai-trip-2026',
       (updatedTrip) => {
         setTrip(updatedTrip);
+        setIsTripLoaded(true);
       },
       (err) => {
         console.warn('Realtime sync notification:', err);
+        setIsTripLoaded(true);
         setSyncError('เชื่อมต่อกับคลาวด์ไม่ได้ การแก้ไขจะเก็บไว้ในเครื่องนี้ก่อน');
       }
     );
@@ -91,6 +110,25 @@ export function App() {
   };
 
   const confirmedCount = trip.members.filter((m) => m.status === 'confirmed').length;
+
+  if (!isTripLoaded) {
+    return (
+      <div className="min-h-screen bg-mist flex items-center justify-center">
+        <p className="text-fine text-stone">กำลังเปิดทริป…</p>
+      </div>
+    );
+  }
+
+  if (!me && !isGuest) {
+    return (
+      <WelcomeGate
+        trip={trip}
+        onUpdateTrip={handleUpdateTrip}
+        onChooseMe={chooseMyMember}
+        onSkip={browseAsGuest}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-mist flex flex-col">

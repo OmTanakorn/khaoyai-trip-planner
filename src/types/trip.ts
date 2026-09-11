@@ -164,6 +164,12 @@ export interface Announcement {
 
 export interface TripData {
   id: string;
+  /**
+   * Bumped on every saved change. Whoever holds the higher number holds the
+   * newer trip — it is how a device tells its own unsynced edits apart from an
+   * older copy arriving from the cloud cache.
+   */
+  revision?: number;
   title: string;
   tagline: string;
   destination: string;
