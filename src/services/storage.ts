@@ -319,12 +319,16 @@ export function subscribeToTrip(
     if (stopped) return;
     const assembled = withDefaults(trip);
     const bag = assembled as unknown as Record<string, unknown>;
+    const migrated = (trip as { listsMigrated?: boolean }).listsMigrated === true;
+
     for (const list of TRIP_LISTS) {
       const items = lists.get(list);
-      // A list with no documents yet is not the same as an empty list: it is a
-      // list whose first snapshot has not arrived, or one still living inline
-      // on the trip document from before the split. Leave whatever is there.
-      if (items && items.length) bag[list] = sortList(list, items);
+      if (!items) continue; // that list's first snapshot has not arrived yet
+
+      // Once the lists have moved, the subcollection is the whole truth —
+      // including when it is empty. Falling back to the copy still sitting
+      // inline on the trip document would put back everything just deleted.
+      if (migrated || items.length) bag[list] = sortList(list, items);
     }
     saveLocalTripData(assembled);
     onData(assembled);
