@@ -3,7 +3,7 @@ import { Plus, Trash2, Pencil } from 'lucide-react';
 import { TripData, Expense, Member, Payment, TripListEditor } from '../types/trip';
 import { PromptPayQR } from './PromptPayQR';
 import { SlipField } from './SlipField';
-import { Transfer } from '../services/settlement';
+import { Balance, Transfer } from '../services/settlement';
 import { calculateBalances, settleUp } from '../services/settlement';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Meter } from './ui';
@@ -21,6 +21,115 @@ const CATEGORY_LABEL: Record<Expense['category'], string> = {
   fuel: 'น้ำมันและทางด่วน',
   tickets: 'ค่าเข้าและบัตรกิจกรรม',
   other: 'อื่น ๆ',
+};
+
+/** One line of the arithmetic: a label on the left, money on the right. */
+const Line: React.FC<{
+  label: string;
+  value: number;
+  sign?: '+' | '−';
+  strong?: boolean;
+}> = ({ label, value, sign, strong }) => (
+  <div
+    className={`flex items-baseline justify-between gap-4 ${
+      strong ? 'text-body text-ink' : 'text-fine text-stone'
+    }`}
+  >
+    <dt className="truncate">{label}</dt>
+    <dd className="shrink-0 tabular-nums">
+      {sign && <span className="mr-0.5">{sign}</span>}
+      {baht(value)}
+    </dd>
+  </div>
+);
+
+/**
+ * One person's money, shown as a sum rather than a verdict. The totals on top
+ * are the answer; the fold underneath is every bill that produced them, so
+ * "why am I down 6,667?" can be checked line by line instead of taken on
+ * trust.
+ */
+const LedgerRow: React.FC<{ balance: Balance; member?: Member }> = ({ balance, member }) => {
+  const { paid, owes, net, shares, fronted, settledOut, settledIn } = balance;
+  const heading = net < 0 ? 'ยังต้องโอนอีก' : net > 0 ? 'รอรับคืน' : 'เคลียร์พอดี';
+
+  return (
+    <li className="py-6">
+      <div className="flex items-baseline justify-between gap-4">
+        <span className="inline-flex items-center gap-2.5 min-w-0">
+          <span
+            className="w-1.5 h-1.5 shrink-0"
+            style={{ backgroundColor: member?.avatarColor }}
+            aria-hidden="true"
+          />
+          <span className="text-body text-ink truncate">{member?.nickname}</span>
+        </span>
+        <span className="shrink-0 text-right">
+          <span className="block text-fine text-stone">{heading}</span>
+          <span className="block text-lead text-ink tabular-nums">
+            {baht(Math.abs(net))}
+          </span>
+        </span>
+      </div>
+
+      <dl className="mt-4 space-y-2">
+        <Line label={`ส่วนแบ่งของตัวเอง · ${shares.length} รายการ`} value={owes} />
+        <Line label={`สำรองจ่ายไปก่อน · ${fronted.length} รายการ`} value={paid} sign="−" />
+        {settledOut > 0 && <Line label="โอนคืนไปแล้ว" value={settledOut} sign="−" />}
+        {settledIn > 0 && <Line label="รับโอนมาแล้ว" value={settledIn} sign="+" />}
+        <div className="pt-2 border-t border-mist-deep">
+          <Line
+            label={net < 0 ? 'ค้างอยู่' : net > 0 ? 'เพื่อนค้างอยู่' : 'ไม่ค้างกันแล้ว'}
+            value={Math.abs(net)}
+            strong
+          />
+        </div>
+      </dl>
+
+      {shares.length > 0 && (
+        <details className="mt-4">
+          <summary className="text-fine text-stone cursor-pointer hover:text-ink">
+            ส่วนแบ่ง {baht(owes)} มาจากไหน
+          </summary>
+          <ul className="mt-3 space-y-2">
+            {shares.map((line) => (
+              <li
+                key={line.expenseId}
+                className="flex items-baseline justify-between gap-4 text-fine text-stone tabular-nums"
+              >
+                <span className="truncate">
+                  {line.title}{' '}
+                  <span className="text-stone/70">
+                    {baht(line.amount)} ÷ {line.sharers} คน
+                  </span>
+                </span>
+                <span className="shrink-0 text-ink">{baht(line.share)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {fronted.length > 0 && (
+        <details className="mt-2">
+          <summary className="text-fine text-stone cursor-pointer hover:text-ink">
+            สำรองจ่ายไป {baht(paid)} กับอะไรบ้าง
+          </summary>
+          <ul className="mt-3 space-y-2">
+            {fronted.map((line) => (
+              <li
+                key={line.expenseId}
+                className="flex items-baseline justify-between gap-4 text-fine text-stone tabular-nums"
+              >
+                <span className="truncate">{line.title}</span>
+                <span className="shrink-0 text-ink">{baht(line.amount)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </li>
+  );
 };
 
 export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRemoveItem, me }) => {
@@ -51,6 +160,24 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRe
   const transfers = settleUp(balances);
   const nameOf = (id: string) =>
     trip.members.find((m) => m.id === id)?.nickname ?? 'ไม่ระบุ';
+
+  /**
+   * The same cut the settlement makes, worked out here so a row can show its
+   * own arithmetic instead of only the total.
+   */
+  const eligibleIds = new Set(
+    trip.members.filter((m) => m.status !== 'declined').map((m) => m.id)
+  );
+  const confirmedIds = trip.members
+    .filter((m) => m.status === 'confirmed')
+    .map((m) => m.id);
+  const splitOf = (exp: Expense) => {
+    const named = exp.splitBetween?.length ? exp.splitBetween : confirmedIds;
+    const ids = named.filter((id) => eligibleIds.has(id));
+    if (ids.length === 0) return null;
+    const base = Math.floor(exp.amount / ids.length);
+    return { ids, base, remainder: exp.amount - base * ids.length };
+  };
 
   /** PromptPay falls back to the phone number, which is what most people use. */
   const promptPayOf = (id: string) => {
@@ -181,9 +308,14 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRe
           {baht(totalExpense)}
         </p>
         <p className="mt-4 text-body text-mist/70">
-          {balances.length > 0 && `เฉลี่ยคนละ ${baht(averageShare)} · `}
+          {balances.length > 0 && `หัวละ ${baht(averageShare)} ถ้าหารเท่ากันหมด · `}
           บันทึกไว้ {trip.expenses.length} รายการ
         </p>
+        {balances.length > 0 && (
+          <p className="mt-1.5 text-fine text-mist/50">
+            ของจริงไม่เท่ากัน เพราะแต่ละรายการหารคนละกลุ่ม ดูของแต่ละคนได้ที่ตารางด้านล่าง
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-px bg-mist-deep">
@@ -240,6 +372,19 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRe
                     </span>
                     <span className="text-body text-ink shrink-0">{baht(tr.amount)}</span>
                   </div>
+                  {(() => {
+                    const from = balances.find((b) => b.memberId === tr.fromId);
+                    if (!from) return null;
+                    return (
+                      <p className="mt-1 text-fine text-stone tabular-nums">
+                        ส่วนแบ่ง {baht(from.owes)} − สำรองจ่าย {baht(from.paid)}
+                        {from.settledOut > 0 && ` − โอนแล้ว ${baht(from.settledOut)}`}
+                        {from.settledIn > 0 && ` + รับมา ${baht(from.settledIn)}`} ={' '}
+                        {baht(-from.net)}
+                        {tr.amount !== -from.net && ` · ยอดนี้เป็นส่วนหนึ่ง`}
+                      </p>
+                    );
+                  })()}
                   <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2">
                     <button
                       onClick={() => {
@@ -304,35 +449,26 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRe
             </div>
           )}
 
-          {balances.length > 0 && (
-            <details className="mt-6 pt-5 border-t border-mist-deep">
-              <summary className="text-fine text-stone cursor-pointer hover:text-ink">
-                ดูยอดของแต่ละคน
-              </summary>
-              <ul className="mt-4 divide-y divide-mist-deep">
-                {balances.map((b) => {
-                  const member = trip.members.find((m) => m.id === b.memberId);
-                  return (
-                    <li key={b.memberId} className="py-3 flex items-center justify-between gap-4">
-                      <span className="inline-flex items-center gap-2.5 min-w-0">
-                        <span
-                          className="w-1.5 h-1.5 shrink-0"
-                          style={{ backgroundColor: member?.avatarColor }}
-                          aria-hidden="true"
-                        />
-                        <span className="text-body text-ink truncate">{member?.nickname}</span>
-                      </span>
-                      <span className="text-fine text-stone shrink-0">
-                        ออกไป {baht(b.paid)} · ส่วนตัวเอง {baht(b.owes)}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </details>
-          )}
         </Panel>
       </div>
+
+      {balances.length > 0 && (
+        <Panel className="mt-px">
+          <div className="flex items-baseline justify-between gap-4 border-b border-mist-deep pb-5">
+            <h2 className="font-display text-lead text-ink">ยอดของแต่ละคน</h2>
+            <span className="text-fine text-stone">กดดูที่มาของทุกบาท</span>
+          </div>
+          <ul className="divide-y divide-mist-deep">
+            {balances.map((b) => (
+              <LedgerRow
+                key={b.memberId}
+                balance={b}
+                member={trip.members.find((m) => m.id === b.memberId)}
+              />
+            ))}
+          </ul>
+        </Panel>
+      )}
 
       <Panel className="mt-px">
         <div className="flex items-baseline justify-between gap-4 border-b border-mist-deep pb-5">
@@ -368,6 +504,21 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRe
                         : 'หารทุกคน'}
                       {exp.notes && ` · ${exp.notes}`}
                     </p>
+                    {(() => {
+                      const split = splitOf(exp);
+                      if (!split) return null;
+                      return (
+                        <p className="mt-1 text-fine text-stone tabular-nums">
+                          {baht(exp.amount)} ÷ {split.ids.length} คน = คนละ{' '}
+                          {baht(split.base)}
+                          {split.remainder > 0 &&
+                            ` (เศษอีก ฿${split.remainder} ตกที่ ${split.ids
+                              .slice(0, split.remainder)
+                              .map(nameOf)
+                              .join(' ')} คนละ ฿1)`}
+                        </p>
+                      );
+                    })()}
                     {exp.slipId && (
                       <div className="mt-3">
                         <SlipField
