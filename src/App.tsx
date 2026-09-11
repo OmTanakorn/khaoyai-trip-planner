@@ -4,13 +4,14 @@ import { OverviewTab } from './components/OverviewTab';
 import { CarsTab } from './components/CarsTab';
 import { AccommodationTab } from './components/AccommodationTab';
 import { ItineraryTab } from './components/ItineraryTab';
+import { FoodTab } from './components/FoodTab';
 import { ExpensesTab } from './components/ExpensesTab';
 import { PackingTab } from './components/PackingTab';
 import { MembersTab } from './components/MembersTab';
 import { DayOfTab } from './components/DayOfTab';
 import { SyncModal } from './components/SyncModal';
 import { ShareModal } from './components/ShareModal';
-import { TripData } from './types/trip';
+import { TripData, Member } from './types/trip';
 import { initialTripData } from './data/initialData';
 import {
   subscribeToTrip,
@@ -18,23 +19,60 @@ import {
   isFirebaseConnected,
   TripUpdate,
 } from './services/storage';
-import { getMyMemberId, setMyMemberId } from './services/identity';
+import {
+  getMyIdentity,
+  rememberMyIdentity,
+  resolveMe,
+  isBrowsingAsGuest,
+  setBrowsingAsGuest,
+  DeviceIdentity,
+} from './services/identity';
+import { WelcomeGate } from './components/WelcomeGate';
 
 export function App() {
   const [trip, setTrip] = useState<TripData>(initialTripData);
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [myMemberId, setMyMemberIdState] = useState<string | null>(getMyMemberId);
+  const [myIdentity, setMyIdentity] = useState<DeviceIdentity | null>(getMyIdentity);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [isGuest, setIsGuest] = useState(isBrowsingAsGuest);
+  // The stored trip arrives a moment after the first paint. Until it does we
+  // cannot tell a first-time visitor from someone whose member has not loaded
+  // yet, so hold the question rather than flash it at a returning friend.
+  const [isTripLoaded, setIsTripLoaded] = useState(false);
   const isFirebase = isFirebaseConnected();
 
-  const me = trip.members.find((m) => m.id === myMemberId) ?? null;
+  const me = resolveMe(trip.members, myIdentity);
 
-  const chooseMyMember = (id: string | null) => {
-    setMyMemberId(id);
-    setMyMemberIdState(id);
+  // Takes a member id (the picker) or the member itself — someone who has
+  // just signed up is not in `trip.members` yet on this render.
+  const chooseMyMember = (who: string | Member | null) => {
+    const member =
+      typeof who === 'string' ? trip.members.find((m) => m.id === who) ?? null : who;
+    const identity = member ? { id: member.id, nickname: member.nickname } : null;
+    rememberMyIdentity(identity);
+    setMyIdentity(identity);
+    // Dropping the name puts the question back, rather than leaving the app in
+    // a state where nothing can be voted on and nothing explains why.
+    setBrowsingAsGuest(false);
+    setIsGuest(false);
   };
+
+  const browseAsGuest = () => {
+    setBrowsingAsGuest(true);
+    setIsGuest(true);
+  };
+
+  // The remembered id goes stale when the trip is re-imported, and the
+  // nickname when someone renames themselves. Whoever resolved here is the
+  // truth now, so keep the stored copy in step — storage only: this render
+  // already has the right person.
+  useEffect(() => {
+    if (!me || !myIdentity) return;
+    if (me.id === myIdentity.id && me.nickname === myIdentity.nickname) return;
+    rememberMyIdentity({ id: me.id, nickname: me.nickname });
+  }, [me, myIdentity]);
 
   // Subscribe to realtime changes (Firestore or LocalStorage event)
   useEffect(() => {
@@ -42,9 +80,11 @@ export function App() {
       'khaoyai-trip-2026',
       (updatedTrip) => {
         setTrip(updatedTrip);
+        setIsTripLoaded(true);
       },
       (err) => {
         console.warn('Realtime sync notification:', err);
+        setIsTripLoaded(true);
         setSyncError('เชื่อมต่อกับคลาวด์ไม่ได้ การแก้ไขจะเก็บไว้ในเครื่องนี้ก่อน');
       }
     );
@@ -70,6 +110,25 @@ export function App() {
   };
 
   const confirmedCount = trip.members.filter((m) => m.status === 'confirmed').length;
+
+  if (!isTripLoaded) {
+    return (
+      <div className="min-h-screen bg-mist flex items-center justify-center">
+        <p className="text-fine text-stone">กำลังเปิดทริป…</p>
+      </div>
+    );
+  }
+
+  if (!me && !isGuest) {
+    return (
+      <WelcomeGate
+        trip={trip}
+        onUpdateTrip={handleUpdateTrip}
+        onChooseMe={chooseMyMember}
+        onSkip={browseAsGuest}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-mist flex flex-col">
@@ -98,6 +157,8 @@ export function App() {
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
             setActiveTab={setActiveTab}
+            me={me}
+            onChooseMe={chooseMyMember}
           />
         )}
 
@@ -118,6 +179,14 @@ export function App() {
 
         {activeTab === 'itinerary' && (
           <ItineraryTab
+            trip={trip}
+            onUpdateTrip={handleUpdateTrip}
+            me={me}
+          />
+        )}
+
+        {activeTab === 'food' && (
+          <FoodTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
             me={me}
@@ -147,6 +216,8 @@ export function App() {
           <MembersTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
+            me={me}
+            onChooseMe={chooseMyMember}
           />
         )}
       </main>

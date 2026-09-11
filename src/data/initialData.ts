@@ -14,6 +14,7 @@ export const initialTripData: TripData = {
   cars: [],
   accommodationOptions: [],
   placeIdeas: [],
+  menuIdeas: [],
   itinerary: [
     {
       dayNumber: 1,

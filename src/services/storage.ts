@@ -9,6 +9,7 @@ import {
   setDoc,
   runTransaction,
   Firestore,
+  DocumentReference,
 } from 'firebase/firestore';
 import { TripData } from '../types/trip';
 import { initialTripData } from '../data/initialData';
@@ -28,6 +29,15 @@ const BUILD_OWNED_FIELDS = {
 } as const;
 
 const FIREBASE_CONFIG_KEY = 'khaoyai_firebase_config';
+
+/**
+ * A trip stored before a field existed comes back without it, and screens then
+ * map over `undefined`. Fill anything missing from the shipped defaults and
+ * re-apply the build-owned fields on top.
+ */
+function withDefaults(data: Partial<TripData>): TripData {
+  return { ...initialTripData, ...data, ...BUILD_OWNED_FIELDS };
+}
 
 export interface FirebaseConfig {
   apiKey: string;
@@ -142,7 +152,7 @@ export function loadLocalTripData(): TripData {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...initialTripData, ...parsed, ...BUILD_OWNED_FIELDS };
+      return withDefaults(parsed);
     }
   } catch (e) {
     console.warn('Error reading local trip data', e);
@@ -157,6 +167,9 @@ export function saveLocalTripData(data: TripData): void {
     console.error('Error saving local trip data', e);
   }
 }
+
+/** Higher wins. A trip stored before revisions existed counts as zero. */
+const revisionOf = (trip: Partial<TripData>): number => trip.revision ?? 0;
 
 // Realtime subscription or local polling
 export function subscribeToTrip(
@@ -173,10 +186,19 @@ export function subscribeToTrip(
         tripDocRef,
         (snapshot) => {
           if (snapshot.exists()) {
-            const data = {
-              ...(snapshot.data() as TripData),
-              ...BUILD_OWNED_FIELDS,
-            };
+            const data = withDefaults(snapshot.data() as TripData);
+            const local = loadLocalTripData();
+
+            // An edit made while the network was out lives only on this
+            // device, and Firestore serves the older document from its cache
+            // until it reconnects. Keep the newer copy and push it up rather
+            // than letting the stale one erase what was typed.
+            if (revisionOf(data) < revisionOf(local)) {
+              onData(local);
+              repairCloudCopy(tripDocRef, local);
+              return;
+            }
+
             saveLocalTripData(data);
             onData(data);
           } else {
@@ -207,7 +229,7 @@ export function subscribeToTrip(
   const handleStorageEvent = (event: StorageEvent) => {
     if (event.key === LOCAL_STORAGE_KEY && event.newValue) {
       try {
-        onData(JSON.parse(event.newValue));
+        onData(withDefaults(JSON.parse(event.newValue)));
       } catch (err) {
         console.error('Storage event parse error', err);
       }
@@ -221,6 +243,23 @@ export function subscribeToTrip(
   return () => {
     window.removeEventListener('storage', handleStorageEvent);
   };
+}
+
+/**
+ * Push this device's newer copy back up. Unlike a transaction — which needs a
+ * live connection — a plain write is queued by Firestore and replayed on
+ * reconnect, which is what makes the repair land at all.
+ */
+let repairInFlight = false;
+
+function repairCloudCopy(tripDocRef: DocumentReference, local: TripData): void {
+  if (repairInFlight) return;
+  repairInFlight = true;
+  setDoc(tripDocRef, local)
+    .catch((err) => console.warn('Could not push the local trip copy up:', err))
+    .finally(() => {
+      repairInFlight = false;
+    });
 }
 
 /**
@@ -254,13 +293,18 @@ export async function persistTripData(
   tripId: string,
   update: TripUpdate
 ): Promise<TripData> {
-  const db = initFirebase();
+  // This device's own copy is written first, always. A transaction needs a
+  // live connection — offline it hangs rather than failing — and an edit must
+  // still survive a reload on a phone halfway up the mountain.
+  const previous = loadLocalTripData();
+  const local = {
+    ...applyUpdate(update, previous),
+    revision: revisionOf(previous) + 1,
+  };
+  saveLocalTripData(local);
 
-  if (!db) {
-    const next = applyUpdate(update, loadLocalTripData());
-    saveLocalTripData(next);
-    return next;
-  }
+  const db = initFirebase();
+  if (!db) return local;
 
   const tripDocRef = doc(db, 'trips', tripId);
 
@@ -268,10 +312,15 @@ export async function persistTripData(
     const next = await runTransaction(db, async (tx) => {
       const snapshot = await tx.get(tripDocRef);
       const current = snapshot.exists()
-        ? { ...(snapshot.data() as TripData), ...BUILD_OWNED_FIELDS }
+        ? withDefaults(snapshot.data() as TripData)
         : loadLocalTripData();
 
-      const updated = applyUpdate(update, current);
+      const updated = {
+        ...applyUpdate(update, current),
+        // Past both what the cloud holds and what this device already counted,
+        // so neither side reads the result as stale.
+        revision: Math.max(revisionOf(current) + 1, revisionOf(local)),
+      };
       tx.set(tripDocRef, updated);
       return updated;
     });
@@ -280,9 +329,7 @@ export async function persistTripData(
     return next;
   } catch (e) {
     console.error('Failed to sync to Firestore:', e);
-    // Keep the edit on this device so it is not lost while the network is out.
-    const next = applyUpdate(update, loadLocalTripData());
-    saveLocalTripData(next);
+    // The edit is already on this device; only the cloud copy is behind.
     throw e;
   }
 }
@@ -296,6 +343,7 @@ export function importTripFromJson(jsonStr: string): TripData {
   if (!parsed.id || !parsed.title || !Array.isArray(parsed.members)) {
     throw new Error('รูปแบบไฟล์ JSON ไม่ถูกต้อง');
   }
-  saveLocalTripData(parsed);
-  return parsed;
+  const trip = withDefaults(parsed);
+  saveLocalTripData(trip);
+  return trip;
 }

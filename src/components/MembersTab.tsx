@@ -8,6 +8,8 @@ import { input, btnSolid, btnQuiet, btnLink } from './ui-kit';
 interface MembersTabProps {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
+  me: Member | null;
+  onChooseMe: (who: string | Member | null) => void;
 }
 
 const AVATAR_COLORS = [
@@ -15,7 +17,12 @@ const AVATAR_COLORS = [
   '#8c7340', '#3d5a4a', '#b09a6a', '#55665c', '#7d6b3f', '#42574b',
 ];
 
-export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) => {
+export const MembersTab: React.FC<MembersTabProps> = ({
+  trip,
+  onUpdateTrip,
+  me,
+  onChooseMe,
+}) => {
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
 
@@ -26,6 +33,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
   const [status, setStatus] = useState<Member['status']>('confirmed');
   const [role, setRole] = useState<Member['role']>('member');
   const [paidDeposit, setPaidDeposit] = useState(true);
+  const [isMe, setIsMe] = useState(false);
 
   const confirmedCount = trip.members.filter((m) => m.status === 'confirmed').length;
   const maybeCount = trip.members.filter((m) => m.status === 'maybe').length;
@@ -40,6 +48,10 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
     setStatus('confirmed');
     setRole('member');
     setPaidDeposit(true);
+    // Nobody claimed this browser yet, so the first name typed here is most
+    // likely the person holding it. Still a checkbox — they can clear it when
+    // they are adding a friend.
+    setIsMe(!me);
     setIsMemberModalOpen(true);
   };
 
@@ -52,6 +64,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
     setStatus(m.status);
     setRole(m.role);
     setPaidDeposit(!!m.paidDeposit);
+    setIsMe(me?.id === m.id);
     setIsMemberModalOpen(true);
   };
 
@@ -68,6 +81,12 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
             : m
         ),
       }));
+
+      if (isMe) {
+        onChooseMe({ ...editingMember, nickname });
+      } else if (me?.id === editingMember.id) {
+        onChooseMe(null);
+      }
     } else {
       const newMem: Member = {
         id: `m-${Date.now()}`,
@@ -81,6 +100,8 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
         paidDeposit,
       };
       onUpdateTrip((t) => ({ ...t, members: [...t.members, newMem] }));
+      // Remember it on this device so the next visit already knows the name.
+      if (isMe) onChooseMe(newMem);
     }
     setIsMemberModalOpen(false);
   };
@@ -94,6 +115,8 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
     ) {
       return;
     }
+
+    if (me?.id === memberId) onChooseMe(null);
 
     onUpdateTrip((t) => ({
       ...t,
@@ -207,6 +230,17 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
                 </div>
 
                 <div className="flex items-center gap-4 shrink-0">
+                  {me?.id === member.id ? (
+                    <span className="text-fine text-brass">นี่คือคุณ</span>
+                  ) : (
+                    <button
+                      onClick={() => onChooseMe(member)}
+                      className="text-fine text-stone hover:text-ink transition-colors"
+                      title={`จำไว้ว่าเครื่องนี้คือ ${member.nickname}`}
+                    >
+                      นี่คือฉัน
+                    </button>
+                  )}
                   {member.phone && (
                     <a
                       href={`tel:${member.phone}`}
@@ -321,7 +355,25 @@ export const MembersTab: React.FC<MembersTabProps> = ({ trip, onUpdateTrip }) =>
               </Field>
             </div>
 
-            <div className="flex items-center gap-2.5 border-t border-mist-deep pt-5">
+            <div className="border-t border-mist-deep pt-5 space-y-3">
+              <div className="flex items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  id="mem-is-me"
+                  checked={isMe}
+                  onChange={(e) => setIsMe(e.target.checked)}
+                  className="w-4 h-4 accent-brass"
+                />
+                <label htmlFor="mem-is-me" className="text-body text-ink cursor-pointer">
+                  นี่คือฉัน จำไว้ในเครื่องนี้
+                </label>
+              </div>
+              <p className="text-fine text-stone">
+                เปิดไว้แล้วครั้งหน้าที่เปิดจากเครื่องนี้จะเป็นชื่อนี้เลย ไม่ต้องเลือกใหม่
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5">
               <input
                 type="checkbox"
                 id="paidDeposit"

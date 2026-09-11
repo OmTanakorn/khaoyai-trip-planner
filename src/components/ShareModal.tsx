@@ -40,7 +40,20 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, trip })
       text += `รถ: ยังไม่มีใครอาสาขับ\n`;
     }
 
-    text += `\nลงชื่อ เสนอที่พัก และโหวตแผนเที่ยวได้ที่\n${window.location.href}`;
+    const topMenu = [...(trip.menuIdeas ?? [])]
+      .sort((a, b) => b.votes.length - a.votes.length)
+      .slice(0, 5);
+
+    if (topMenu.length > 0) {
+      text += `\nเมนูที่โหวตมาแล้ว\n`;
+      topMenu.forEach((item) => {
+        text += `- ${item.title} (${item.votes.length} โหวต)\n`;
+      });
+    } else {
+      text += `เมนูอาหาร: ยังไม่มีใครเสนอ เข้าไปเสนอเมนูที่อยากกินได้\n`;
+    }
+
+    text += `\nลงชื่อ เสนอที่พัก โหวตเมนู และแผนเที่ยวได้ที่\n${window.location.href}`;
     return text;
   };
 
