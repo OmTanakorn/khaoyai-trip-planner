@@ -7,12 +7,16 @@ interface OverviewTabProps {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
   setActiveTab: (tab: string) => void;
+  me: Member | null;
+  onChooseMe: (who: string | Member | null) => void;
 }
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({
   trip,
   onUpdateTrip,
   setActiveTab,
+  me,
+  onChooseMe,
 }) => {
   const [newAnnouncement, setNewAnnouncement] = useState('');
   const [announcementAuthor, setAnnouncementAuthor] = useState('');
@@ -112,6 +116,11 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       members: [...t.members, newMember],
       cars: newCar ? [...t.cars, newCar] : t.cars,
     }));
+
+    // This form is someone signing themselves up, so this browser is now them
+    // — no second trip through the "who are you" picker. Someone filling it in
+    // for a friend keeps whoever the device already belongs to.
+    if (!me) onChooseMe(newMember);
 
     setQuickNickname('');
     setQuickName('');

@@ -11,7 +11,7 @@ import { MembersTab } from './components/MembersTab';
 import { DayOfTab } from './components/DayOfTab';
 import { SyncModal } from './components/SyncModal';
 import { ShareModal } from './components/ShareModal';
-import { TripData } from './types/trip';
+import { TripData, Member } from './types/trip';
 import { initialTripData } from './data/initialData';
 import {
   subscribeToTrip,
@@ -19,23 +19,43 @@ import {
   isFirebaseConnected,
   TripUpdate,
 } from './services/storage';
-import { getMyMemberId, setMyMemberId } from './services/identity';
+import {
+  getMyIdentity,
+  rememberMyIdentity,
+  resolveMe,
+  DeviceIdentity,
+} from './services/identity';
 
 export function App() {
   const [trip, setTrip] = useState<TripData>(initialTripData);
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [myMemberId, setMyMemberIdState] = useState<string | null>(getMyMemberId);
+  const [myIdentity, setMyIdentity] = useState<DeviceIdentity | null>(getMyIdentity);
   const [syncError, setSyncError] = useState<string | null>(null);
   const isFirebase = isFirebaseConnected();
 
-  const me = trip.members.find((m) => m.id === myMemberId) ?? null;
+  const me = resolveMe(trip.members, myIdentity);
 
-  const chooseMyMember = (id: string | null) => {
-    setMyMemberId(id);
-    setMyMemberIdState(id);
+  // Takes a member id (the picker) or the member itself — someone who has
+  // just signed up is not in `trip.members` yet on this render.
+  const chooseMyMember = (who: string | Member | null) => {
+    const member =
+      typeof who === 'string' ? trip.members.find((m) => m.id === who) ?? null : who;
+    const identity = member ? { id: member.id, nickname: member.nickname } : null;
+    rememberMyIdentity(identity);
+    setMyIdentity(identity);
   };
+
+  // The remembered id goes stale when the trip is re-imported, and the
+  // nickname when someone renames themselves. Whoever resolved here is the
+  // truth now, so keep the stored copy in step — storage only: this render
+  // already has the right person.
+  useEffect(() => {
+    if (!me || !myIdentity) return;
+    if (me.id === myIdentity.id && me.nickname === myIdentity.nickname) return;
+    rememberMyIdentity({ id: me.id, nickname: me.nickname });
+  }, [me, myIdentity]);
 
   // Subscribe to realtime changes (Firestore or LocalStorage event)
   useEffect(() => {
@@ -99,6 +119,8 @@ export function App() {
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
             setActiveTab={setActiveTab}
+            me={me}
+            onChooseMe={chooseMyMember}
           />
         )}
 
@@ -156,6 +178,8 @@ export function App() {
           <MembersTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
+            me={me}
+            onChooseMe={chooseMyMember}
           />
         )}
       </main>
