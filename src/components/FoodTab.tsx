@@ -60,9 +60,13 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
   const mostVotes = menuIdeas.reduce((max, m) => Math.max(max, m.votes.length), 0);
 
   // A dish is "in" once half the confirmed crowd wants it — enough of a signal
-  // to go shopping on, without waiting for everyone to tap.
+  // to go shopping on, without waiting for everyone to tap. Someone can also
+  // just say so: plans get made in the group chat, and a dish that is already
+  // decided should not have to wait for taps it will never get.
   const threshold = Math.max(1, Math.ceil(eaters / 2));
-  const shortlisted = menuIdeas.filter((m) => m.votes.length >= threshold);
+  const isGoing = (m: MenuIdea) => m.approved === true || m.votes.length >= threshold;
+  const shortlisted = menuIdeas.filter(isGoing);
+  const approvedCount = shortlisted.filter((m) => m.approved === true).length;
   const estimatedPerHead = shortlisted.reduce(
     (sum, m) => sum + (m.estimatedPerHead ?? 0),
     0
@@ -132,6 +136,14 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
     onSaveItem('menuIdeas', { ...item, votes: isAdding ? [...votes, voter] : votes });
   };
 
+  /** Undefined rather than false, so an un-approved dish keeps no trace. */
+  const handleApprove = (item: MenuIdea) => {
+    if (item.approved && !window.confirm(`ยกเลิกอนุมัติ ${item.title}? เมนูจะกลับไปนับตามโหวต`)) {
+      return;
+    }
+    onSaveItem('menuIdeas', { ...item, approved: item.approved ? undefined : true });
+  };
+
   const handleDelete = (menuId: string) => {
     const item = menuIdeas.find((m) => m.id === menuId);
     if (!window.confirm(`ลบ ${item?.title ?? 'เมนูนี้'} ออกจากรายการโหวต?`)) return;
@@ -199,7 +211,7 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
     <div className="pb-16">
       <PageHead
         title="เมนูอาหาร"
-        note="เสนอเมนูที่อยากกิน แล้วโหวตกัน เมนูที่คนอยากกินเกินครึ่งถือว่าจะทำ กดแตกเป็นของที่ต้องเตรียมได้เลย"
+        note="เสนอเมนูที่อยากกิน แล้วโหวตกัน เกินครึ่งถือว่าจะทำ หรือกดอนุมัติเองก็ได้ไม่ต้องรอโหวต แล้วแตกเป็นของที่ต้องเตรียมต่อ"
         action={
           <button onClick={openNewModal} className={btnSolid}>
             เสนอเมนู
@@ -218,11 +230,12 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
             </p>
           </div>
           <div>
-            <p className="text-fine text-stone">ผ่านโหวตแล้ว</p>
+            <p className="text-fine text-stone">จะทำแน่</p>
             <p className="mt-2 font-display text-title text-ink leading-none">
               {shortlisted.length}
               <span className="ml-2 font-sans text-fine text-stone">
                 ถึงเกณฑ์ {threshold} โหวต
+                {approvedCount > 0 && ` · อนุมัติมือ ${approvedCount}`}
               </span>
             </p>
           </div>
@@ -243,8 +256,8 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
           <div className="mt-8 pt-6 border-t border-mist-deep flex flex-wrap items-center justify-between gap-4">
             <p className="text-fine text-stone max-w-md">
               {shortlistPending > 0
-                ? `เมนูที่ผ่านโหวตมีของที่ยังไม่ได้เข้ารายการเตรียมของอีก ${shortlistPending} อย่าง`
-                : 'ของจากเมนูที่ผ่านโหวตเข้ารายการเตรียมของครบแล้ว'}
+                ? `เมนูที่จะทำมีของที่ยังไม่ได้เข้ารายการเตรียมของอีก ${shortlistPending} อย่าง`
+                : 'ของจากเมนูที่จะทำเข้ารายการเตรียมของครบแล้ว'}
             </p>
             <button
               onClick={() => sendToPacking(shortlisted)}
@@ -281,7 +294,7 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
             <ul className="divide-y divide-mist-deep">
               {group.items.map((item) => {
                 const hasVoted = !!me && item.votes.includes(me.id);
-                const isShortlisted = item.votes.length >= threshold;
+                const isShortlisted = isGoing(item);
 
                 return (
                   <li key={item.id} className="py-5">
@@ -290,7 +303,9 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
                         <p className="text-body text-ink">
                           {item.title}
                           {isShortlisted && (
-                            <span className="ml-3 text-fine text-brass">เข้ารายการซื้อ</span>
+                            <span className="ml-3 text-fine text-brass">
+                              {item.approved ? 'อนุมัติแล้ว' : 'ผ่านโหวต'}
+                            </span>
                           )}
                         </p>
                         <p className="mt-1 text-fine text-stone">
@@ -345,6 +360,23 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
                           tone={isShortlisted ? 'brass' : 'ink'}
                         />
                       </div>
+
+                      <button
+                        onClick={() => handleApprove(item)}
+                        aria-pressed={!!item.approved}
+                        title={
+                          item.approved
+                            ? 'เมนูนี้ถูกอนุมัติไว้ ไม่ต้องรอโหวต'
+                            : 'ข้ามการโหวต ให้เมนูนี้เข้ารายการของที่ต้องเตรียมเลย'
+                        }
+                        className={`shrink-0 text-fine transition-colors ${
+                          item.approved
+                            ? 'text-stone hover:text-ink'
+                            : 'text-ink border-b border-brass pb-0.5 hover:text-brass'
+                        }`}
+                      >
+                        {item.approved ? 'ยกเลิกอนุมัติ' : 'อนุมัติเลย'}
+                      </button>
                     </div>
 
                     {/* What this dish turns into once it is decided. */}

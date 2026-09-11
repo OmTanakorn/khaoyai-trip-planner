@@ -104,6 +104,12 @@ export interface MenuIdea {
    * the vote can turn itself into shopping.
    */
   ingredients?: string[];
+  /**
+   * Set when someone decides the dish is happening regardless of the vote —
+   * the cook has already bought the pork, the vote is a formality. Absent
+   * means the dish stands on its votes alone.
+   */
+  approved?: boolean;
   suggestedBy: string;
   votes: string[]; // member ids who want this dish
   notes?: string;
