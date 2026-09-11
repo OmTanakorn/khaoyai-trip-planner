@@ -258,10 +258,15 @@ export function subscribeToTrip(
             // An edit made while the network was out lives only on this
             // device, and Firestore serves the older document from its cache
             // until it reconnects. Keep that copy and push it up — but only
-            // when a write really did fail here. Without that check a device
-            // whose counter merely runs ahead would overwrite the shared trip
-            // with its own older copy.
-            if (hasUnsyncedEdit && revisionOf(data) < revisionOf(local)) {
+            // when a write really did fail here, and only against what the
+            // server actually holds.
+            //
+            // The cached snapshot arrives first and can be hours behind, so
+            // judging by it is how one phone opening the app overwrote three
+            // expenses another had just added: its cache looked older than
+            // its own copy, so it pushed that copy over everyone else's work.
+            const fromServer = !snapshot.metadata.fromCache;
+            if (fromServer && hasUnsyncedEdit && revisionOf(data) < revisionOf(local)) {
               onData(local);
               repairCloudCopy(tripDocRef, local);
               return;
