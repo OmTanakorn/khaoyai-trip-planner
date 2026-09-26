@@ -195,6 +195,8 @@ export interface TripData {
   cars: Car[];
   accommodationOptions: AccommodationOption[];
   confirmedAccommodation?: Accommodation;
+  /** Shared whiteboard (Excalidraw room, Miro board…). Only the link is kept. */
+  boardUrl?: string;
   placeIdeas: PlaceIdea[];
   menuIdeas: MenuIdea[];
   itinerary: ItineraryDay[];

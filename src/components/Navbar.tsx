@@ -54,6 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'food', label: 'เมนูอาหาร' },
     { id: 'expenses', label: 'งบและหารเงิน' },
     { id: 'packing', label: 'ของที่ต้องเตรียม' },
+    { id: 'board', label: 'บอร์ดรวม' },
     { id: 'members', label: `เพื่อน ${confirmedCount}` },
   ];
 
