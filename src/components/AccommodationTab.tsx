@@ -38,7 +38,7 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({
   const [optionLinkUrl, setOptionLinkUrl] = useState('');
   const [optionImageUrl, setOptionImageUrl] = useState('');
   const [optionHighlights, setOptionHighlights] = useState('');
-  const [optionSuggestedBy, setOptionSuggestedBy] = useState('');
+  const [optionSuggestedBy, setOptionSuggestedBy] = useState(me?.nickname || '');
 
   const confirmedCount = trip.members.filter((m) => m.status === 'confirmed').length || 10;
   const mostVotes = Math.max(0, ...trip.accommodationOptions.map((o) => o.votes.length));
@@ -290,15 +290,52 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({
                     );
                   })}
 
-                  {room.guestIds.length < room.capacity && (
-                    <button
-                      onClick={() => setAssigningRoomId(room.id)}
-                      disabled={trip.members.length === 0}
-                      className={`${btnLink} disabled:opacity-40 disabled:pointer-events-none`}
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      ใส่คนในห้องนี้
-                    </button>
+                  {/* 1-click personal room action */}
+                  {me ? (
+                    <div className="w-full flex items-center justify-between gap-3 pt-3 mt-1 border-t border-mist-deep/60">
+                      {room.guestIds.includes(me.id) ? (
+                        <div className="flex items-center gap-2 bg-moss/10 border border-moss/30 px-3 py-1.5 rounded-ctl">
+                          <span className="text-fine text-moss font-medium">✓ คุณนอนห้องนี้</span>
+                          <button
+                            onClick={() => handleRemoveGuest(room.id, me.id)}
+                            className="text-fine text-stone hover:text-ink underline ml-1 cursor-pointer"
+                          >
+                            ออกจากห้อง
+                          </button>
+                        </div>
+                      ) : room.guestIds.length < room.capacity ? (
+                        <button
+                          onClick={() => handleAssignGuest(room.id, me.id)}
+                          className="px-3.5 py-1.5 bg-brass hover:bg-brass-lit text-ink text-fine font-medium rounded-ctl transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
+                        >
+                          🛏️ ขอนอนห้องนี้
+                        </button>
+                      ) : (
+                        <span className="text-fine text-stone italic">ห้องนี้เต็มแล้ว</span>
+                      )}
+
+                      {room.guestIds.length < room.capacity && (
+                        <button
+                          onClick={() => setAssigningRoomId(room.id)}
+                          disabled={trip.members.length === 0}
+                          className={`${btnLink} text-stone hover:text-ink ml-auto`}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          ใส่เพื่อน
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    room.guestIds.length < room.capacity && (
+                      <button
+                        onClick={() => setAssigningRoomId(room.id)}
+                        disabled={trip.members.length === 0}
+                        className={`${btnLink} disabled:opacity-40 disabled:pointer-events-none`}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        ใส่คนในห้องนี้
+                      </button>
+                    )
                   )}
                 </div>
               </li>
@@ -319,17 +356,25 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({
             onClose={() => setAssigningRoomId(null)}
           >
             <ul className="divide-y divide-mist-deep max-h-72 overflow-y-auto">
-              {trip.members
-                .filter((m) => m.status !== 'declined')
+              {[...trip.members.filter((m) => m.status !== 'declined')]
+                .sort((a, b) => {
+                  if (me && a.id === me.id) return -1;
+                  if (me && b.id === me.id) return 1;
+                  return 0;
+                })
                 .map((member) => {
                   const currentRoom = stay.rooms.find((r) => r.guestIds.includes(member.id));
                   const isHere = currentRoom?.id === assigningRoomId;
+                  const isMe = me && member.id === me.id;
+
                   return (
                     <li key={member.id}>
                       <button
                         onClick={() => handleAssignGuest(assigningRoomId, member.id)}
                         disabled={isHere}
-                        className="w-full flex items-center justify-between gap-4 py-3 text-left disabled:opacity-50 group"
+                        className={`w-full flex items-center justify-between gap-4 py-3 text-left disabled:opacity-50 group ${
+                          isMe ? 'bg-brass/5 px-2 -mx-2 rounded' : ''
+                        }`}
                       >
                         <span className="inline-flex items-center gap-2.5 text-body text-ink group-hover:text-brass transition-colors">
                           <span
@@ -338,6 +383,11 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({
                             aria-hidden="true"
                           />
                           {member.nickname}
+                          {isMe && (
+                            <span className="text-[11px] px-1.5 py-0.2 rounded bg-brass text-ink font-medium">
+                              คุณ
+                            </span>
+                          )}
                         </span>
                         <span className="text-fine text-stone">
                           {isHere

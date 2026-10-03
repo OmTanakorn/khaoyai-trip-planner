@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Send, ArrowRight, Trash2 } from 'lucide-react';
+import { Plus, Send, ArrowRight, Trash2, CheckCircle2, Car, Home, MapPin, Share2, Sparkles } from 'lucide-react';
 import { TripData, Member, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 
@@ -20,8 +20,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   onChooseMe,
 }) => {
   const [newAnnouncement, setNewAnnouncement] = useState('');
-  const [announcementAuthor, setAnnouncementAuthor] = useState('');
+  const [announcementAuthor, setAnnouncementAuthor] = useState(me?.nickname || '');
   const [showAnnounceForm, setShowAnnounceForm] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Quick RSVP form states
   const [quickNickname, setQuickNickname] = useState('');
@@ -36,6 +37,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   const confirmedMembers = trip.members.filter((m) => m.status === 'confirmed');
 
   const totalCarSeats = trip.cars.reduce((sum, car) => sum + car.maxSeats, 0);
+
+  // Check personal status for the logged-in user
+  const myCar = me
+    ? trip.cars.find(
+        (c) =>
+          c.passengerIds.includes(me.id) ||
+          c.driverName.includes(me.nickname) ||
+          c.driverName.includes(me.name)
+      )
+    : undefined;
+
+  const myRoom = me
+    ? trip.confirmedAccommodation?.rooms.find((r) => r.guestIds.includes(me.id))
+    : undefined;
 
   // Countdown to the departure date
   const calculateDaysLeft = () => {
@@ -128,10 +143,12 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       title: 'รวมพลเพื่อน',
       value: `${confirmedMembers.length}`,
       unit: 'จาก 10–12 คน',
-      note:
+      badge:
         confirmedMembers.length >= 10
-          ? 'ครบแก๊งแล้ว'
-          : `ยังขาดอีกอย่างน้อย ${Math.max(0, 10 - confirmedMembers.length)} คน`,
+          ? '🟢 ครบแก๊งแล้ว'
+          : `🟡 ขาดอีก ${Math.max(0, 10 - confirmedMembers.length)} คน`,
+      note: 'เป้าหมาย 10–12 คน',
+      isDone: confirmedMembers.length >= 10,
     },
     {
       tab: 'cars',
@@ -139,10 +156,14 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       title: 'สำรวจรถ',
       value: `${trip.cars.length}`,
       unit: 'คัน',
-      note:
+      badge:
         trip.cars.length === 0
-          ? 'ยังไม่มีใครอาสาขับ'
-          : `นั่งได้รวม ${totalCarSeats} คน`,
+          ? '🔴 ยังไม่มีรถ'
+          : totalCarSeats >= confirmedMembers.length
+          ? '🟢 ที่นั่งพอแล้ว'
+          : `🟡 ขาดอีก ${confirmedMembers.length - totalCarSeats} ที่`,
+      note: trip.cars.length === 0 ? 'ต้องการคนอาสาขับ' : `นั่งได้รวม ${totalCarSeats} คน`,
+      isDone: totalCarSeats >= confirmedMembers.length && trip.cars.length > 0,
     },
     {
       tab: 'stay',
@@ -150,7 +171,15 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       title: 'โหวตที่พัก',
       value: `${trip.accommodationOptions.length}`,
       unit: 'ตัวเลือก',
-      note: trip.confirmedAccommodation ? 'จองแล้ว' : 'ยังเปิดรับข้อเสนอ',
+      badge: trip.confirmedAccommodation
+        ? '🟢 จองแล้ว'
+        : trip.accommodationOptions.length > 0
+        ? '🟡 กำลังโหวต'
+        : '🔴 ยังไม่มีตัวเลือก',
+      note: trip.confirmedAccommodation
+        ? trip.confirmedAccommodation.name
+        : 'พูลวิลล่า 4–5 ห้องนอน',
+      isDone: Boolean(trip.confirmedAccommodation),
     },
     {
       tab: 'itinerary',
@@ -158,32 +187,75 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       title: 'ปักหมุดที่เที่ยว',
       value: `${trip.placeIdeas.length}`,
       unit: 'จุดแวะ',
+      badge:
+        trip.placeIdeas.length >= 3
+          ? `🟢 ปักแล้ว ${trip.placeIdeas.length} จุด`
+          : trip.placeIdeas.length > 0
+          ? `🟡 มี ${trip.placeIdeas.length} จุดแวะ`
+          : '🔴 ยังไม่มีจุดแวะ',
       note: 'คาเฟ่และร้านอาหาร',
+      isDone: trip.placeIdeas.length >= 3,
     },
   ];
 
   const nextSteps = [
     {
       tab: 'stay',
-      title: 'เสนอตัวเลือกที่พัก',
-      detail: 'พูลวิลล่าสี่ถึงห้าห้องนอน รองรับ 10–12 คน',
+      title: 'ที่พักพูลวิลล่า',
+      detail: trip.confirmedAccommodation
+        ? `จองเรียบร้อยแล้ว (${trip.confirmedAccommodation.name})`
+        : 'พูลวิลล่า 4–5 ห้องนอน รองรับ 10–12 คน',
+      badge: trip.confirmedAccommodation ? 'จองแล้ว' : 'รอสรุป',
+      badgeColor: trip.confirmedAccommodation
+        ? 'bg-moss/20 text-moss'
+        : 'bg-brass/20 text-brass',
+      action: trip.confirmedAccommodation ? 'ดูที่พัก' : 'เสนอที่พัก',
     },
     {
       tab: 'cars',
-      title: 'รวบรวมรถเดินทาง',
-      detail: 'ต้องการสองถึงสามคันจึงจะพอกับทั้งกลุ่ม',
+      title: 'รถเดินทางและที่นั่ง',
+      detail:
+        totalCarSeats >= confirmedMembers.length
+          ? `มี ${trip.cars.length} คัน นั่งได้รวม ${totalCarSeats} คน (พอดีกลุ่ม)`
+          : `ยังขาดที่นั่งอีก ${Math.max(0, confirmedMembers.length - totalCarSeats)} ที่`,
+      badge: totalCarSeats >= confirmedMembers.length ? 'ที่นั่งพอ' : 'ขาดรถ',
+      badgeColor:
+        totalCarSeats >= confirmedMembers.length
+          ? 'bg-moss/20 text-moss'
+          : 'bg-brass/20 text-brass',
+      action: 'จัดที่นั่ง',
     },
     {
       tab: 'itinerary',
       title: 'ปักหมุดคาเฟ่และร้านอาหาร',
-      detail: 'เสนอจุดแวะระหว่างทาง แล้วโหวตกัน',
+      detail:
+        trip.placeIdeas.length > 0
+          ? `เสนอแล้ว ${trip.placeIdeas.length} จุดแวะ เข้าไปช่วยโหวตได้เลย`
+          : 'ยังไม่มีจุดแวะระหว่างทาง ช่วยกันเสนอร้านที่อยากไป',
+      badge: trip.placeIdeas.length > 0 ? `${trip.placeIdeas.length} จุด` : 'ยังไม่มี',
+      badgeColor:
+        trip.placeIdeas.length > 0 ? 'bg-moss/20 text-moss' : 'bg-amber-100 text-amber-800',
+      action: 'ปักหมุด',
     },
     {
       tab: 'food',
-      title: 'โหวตเมนูอาหาร',
-      detail: 'เสนอเมนูมื้อเย็นและมื้อเช้า แล้วโหวตก่อนไปซื้อของ',
+      title: 'โหวตเมนูอาหารมื้อเย็น/เช้า',
+      detail:
+        trip.menuIdeas.length > 0
+          ? `มี ${trip.menuIdeas.length} เมนูที่เพื่อนเสนอไว้`
+          : 'เสนอเมนูมื้อเย็นและมื้อเช้า แล้วโหวตก่อนไปซื้อของ',
+      badge: trip.menuIdeas.length > 0 ? `${trip.menuIdeas.length} เมนู` : 'รอเสนอ',
+      badgeColor:
+        trip.menuIdeas.length > 0 ? 'bg-moss/20 text-moss' : 'bg-mist-deep/40 text-stone',
+      action: 'โหวตเมนู',
     },
   ];
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(window.location.href);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
 
   return (
     <div className="pb-16">
@@ -192,84 +264,188 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         <img
           src={trip.coverImage}
           alt="ช้างป่าเดินข้ามถนนในเขาใหญ่ รถจอดรอให้ผ่าน"
-          className="absolute inset-0 w-full h-full object-cover opacity-70"
+          className="absolute inset-0 w-full h-full object-cover opacity-60"
         />
-        {/* Dark at the type, clear through the middle so the elephant reads. */}
-        <div className="absolute inset-0 bg-gradient-to-b from-ink via-ink/25 to-ink" />
+        {/* Layered vignette scrim for contrast and legibility */}
+        <div className="absolute inset-0 bg-gradient-to-b from-ink/90 via-ink/40 to-ink/95" />
 
-        <div className="relative px-6 sm:px-10 pt-14 sm:pt-24 pb-8 sm:pb-10 min-h-[30rem] sm:min-h-[34rem] flex flex-col">
-          <p className="text-fine text-brass-lit">{trip.destination}</p>
+        <div className="relative px-6 sm:px-10 pt-12 sm:pt-20 pb-6 sm:pb-8 min-h-[30rem] sm:min-h-[34rem] flex flex-col">
+          <p className="text-fine text-brass-lit flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 bg-brass rounded-full" />
+            {trip.destination}
+          </p>
 
-          <h1 className="mt-4 font-display text-title sm:text-display font-normal text-paper max-w-2xl">
+          <h1 className="mt-3 font-display text-title sm:text-display font-normal text-paper max-w-2xl">
             {trip.title}
           </h1>
 
-          <p className="mt-5 text-body text-mist/80 max-w-lg">{trip.tagline}</p>
+          <p className="mt-4 text-body text-mist/85 max-w-lg leading-relaxed">{trip.tagline}</p>
 
-          <div className="mt-auto pt-6 flex flex-wrap items-end gap-x-10 gap-y-6 border-t border-paper/15">
-            <div>
-              <span className="font-display text-display sm:text-[4rem] leading-none text-brass-lit">
-                {daysLeft > 0 ? daysLeft : 0}
-              </span>
-              <span className="ml-2 text-body text-mist/70">
-                {daysLeft > 0 ? 'วันก่อนออกเดินทาง' : 'ถึงวันเดินทางแล้ว'}
-              </span>
+          {/* Countdown & Dynamic Action Panel */}
+          <div className="mt-auto pt-6 flex flex-wrap items-center justify-between gap-6 border-t border-paper/15 bg-ink-soft/70 backdrop-blur-md -mx-6 sm:-mx-10 px-6 sm:px-10 pb-5 pt-5 rounded-t-xl">
+            <div className="flex items-center gap-6 sm:gap-8">
+              <div>
+                <span className="font-display text-display sm:text-[3.75rem] leading-none text-brass-lit">
+                  {daysLeft > 0 ? daysLeft : 0}
+                </span>
+                <span className="ml-2.5 text-body text-mist/80">
+                  {daysLeft > 0 ? 'วันก่อนออกเดินทาง' : 'ถึงวันเดินทางแล้ว'}
+                </span>
+              </div>
+
+              <div className="hidden md:block border-l border-paper/20 pl-6">
+                <p className="text-fine text-paper font-medium">
+                  คอนเฟิร์มแล้ว {confirmedMembers.length} คน
+                </p>
+                <p className="text-fine text-mist/60 mt-0.5">
+                  ช่วงเย็นขับช้า ๆ ช้างป่าข้ามถนนบ่อย
+                </p>
+              </div>
             </div>
 
-            <p className="text-fine text-mist/70 leading-relaxed">
-              คอนเฟิร์มแล้ว {confirmedMembers.length} คน
-              <br />
-              ปลายฝนต้นหนาว ช่วงเย็นขับช้า ๆ ช้างข้ามถนนบ่อย
-            </p>
-
-            <button
-              onClick={() => setShowQuickRsvp(true)}
-              className="ml-auto px-6 py-3 bg-brass hover:bg-brass-lit text-ink text-body rounded-ctl transition-colors"
-            >
-              ลงชื่อร่วมทริป
-            </button>
+            {/* Dynamic CTA: tailored for whether the user has joined or not */}
+            {me ? (
+              <div className="flex items-center gap-3.5 bg-ink/90 border border-paper/20 rounded-ctl px-4 py-2.5 shadow-lg">
+                <div className="flex items-center gap-2.5">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: me.avatarColor }}
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-fine text-paper font-medium">คุณ{me.nickname}</span>
+                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-moss/40 text-mist">
+                        ร่วมทริปแล้ว
+                      </span>
+                    </div>
+                    <p className="text-fine text-mist/75 mt-0.5">
+                      {myCar ? `🚗 รถ: ${myCar.driverName}` : '⚠️ ยังไม่ได้เลือกที่นั่งรถ'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveTab(myCar ? 'dayof' : 'cars')}
+                  className="ml-2 px-3.5 py-1.5 bg-brass hover:bg-brass-lit text-ink text-fine font-medium rounded-ctl transition-colors shrink-0 flex items-center gap-1.5 shadow"
+                >
+                  {myCar ? 'ดูวันเดินทาง' : 'เลือกรถ'}
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowQuickRsvp(true)}
+                className="px-6 py-3 bg-brass hover:bg-brass-lit text-ink text-body font-medium rounded-ctl transition-colors shadow-lg flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                ลงชื่อร่วมทริป
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Milestones read as one band attached to the hero, not four cards */}
-        <div className="relative grid grid-cols-2 lg:grid-cols-4 border-t border-paper/15">
+        {/* Milestones read as an interactive step tracker with status badges */}
+        <div className="relative grid grid-cols-2 lg:grid-cols-4 border-t border-paper/15 bg-ink-soft/85 backdrop-blur-sm">
           {milestones.map((m, i) => (
             <button
               key={m.tab}
               onClick={() => setActiveTab(m.tab)}
-              className={`text-left px-6 sm:px-8 py-6 hover:bg-paper/5 transition-colors border-paper/15 ${
+              className={`group text-left px-5 sm:px-8 py-5 hover:bg-paper/10 transition-colors border-paper/15 cursor-pointer ${
                 i % 2 === 0 ? 'border-r' : ''
               } lg:border-r lg:last:border-r-0 ${i < 2 ? 'border-b lg:border-b-0' : ''}`}
             >
-              <p className="text-fine text-brass-lit">ขั้นที่{m.step}</p>
-              <p className="mt-1 text-body text-mist/80">{m.title}</p>
-              <p className="mt-3 font-display text-title text-paper leading-none">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-fine text-brass-lit font-medium">ขั้นที่{m.step}</span>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-paper/10 text-mist group-hover:bg-brass group-hover:text-ink transition-colors">
+                  {m.badge}
+                </span>
+              </div>
+              <p className="mt-1.5 text-body text-mist/90 group-hover:text-paper transition-colors font-medium flex items-center justify-between">
+                <span>{m.title}</span>
+                <ArrowRight className="w-3.5 h-3.5 text-brass-lit opacity-40 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+              </p>
+              <p className="mt-2 font-display text-lead sm:text-title text-paper leading-none">
                 {m.value}
                 <span className="ml-2 font-sans text-fine text-mist/60">{m.unit}</span>
               </p>
-              <p className="mt-2 text-fine text-mist/55">{m.note}</p>
+              <p className="mt-1.5 text-fine text-mist/55 group-hover:text-mist/75 transition-colors truncate">
+                {m.note}
+              </p>
             </button>
           ))}
         </div>
       </section>
 
-      {/* ── Board & next steps ───────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-px bg-mist-deep mt-px">
-        <section className="lg:col-span-2 bg-paper px-6 sm:px-8 py-8">
-          <div className="flex items-start justify-between gap-4 border-b border-mist-deep pb-5">
+      {/* ── Action checklist & Discussion Board ──────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-px bg-mist-deep mt-px">
+        {/* Next Steps / Checklist takes center stage */}
+        <section className="lg:col-span-6 bg-paper px-6 sm:px-8 py-8">
+          <div className="flex items-center justify-between border-b border-mist-deep pb-5">
             <div>
-              <h2 className="font-display text-lead text-ink">บอร์ดพูดคุย</h2>
+              <h2 className="font-display text-lead text-ink">สิ่งที่แก๊งต้องช่วยกันทำ</h2>
               <p className="mt-1 text-fine text-stone">
-                แจ้งข่าว นัดหมาย หรือความคืบหน้าของทริป
+                ความคืบหน้าของทริป คลิกแต่ละข้อเพื่อเข้าไปจัดการ
               </p>
             </div>
-            <button
-              onClick={() => setShowAnnounceForm(!showAnnounceForm)}
-              className="flex items-center gap-1.5 shrink-0 text-fine text-ink border-b border-brass pb-0.5 hover:text-brass transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              โพสต์ข้อความ
-            </button>
+          </div>
+
+          <ol className="divide-y divide-mist-deep mt-2">
+            {nextSteps.map((step, i) => (
+              <li key={step.tab}>
+                <button
+                  onClick={() => setActiveTab(step.tab)}
+                  className="group w-full text-left py-4 flex items-start gap-4 hover:bg-mist/30 px-2 -mx-2 rounded transition-colors"
+                >
+                  <span className="font-display text-lead text-brass leading-none pt-1">
+                    {i + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-body font-medium text-ink group-hover:text-brass transition-colors">
+                        {step.title}
+                      </span>
+                      <span className={`text-[11px] px-2 py-0.5 rounded-full ${step.badgeColor}`}>
+                        {step.badge}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-fine text-stone">{step.detail}</p>
+                  </div>
+                  <span className="shrink-0 flex items-center gap-1 text-fine text-brass pt-1">
+                    <span>{step.action}</span>
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        {/* Board & Noticeboard */}
+        <section className="lg:col-span-6 bg-paper px-6 sm:px-8 py-8">
+          <div className="flex items-start justify-between gap-4 border-b border-mist-deep pb-5">
+            <div>
+              <h2 className="font-display text-lead text-ink">บอร์ดพูดคุย & ประกาศ</h2>
+              <p className="mt-1 text-fine text-stone">
+                แจ้งข่าว นัดหมาย หรือความคืบหน้า
+              </p>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                onClick={handleCopyLink}
+                className="flex items-center gap-1.5 text-fine text-stone hover:text-ink transition-colors"
+                title="คัดลอกลิงก์ส่งเข้า LINE กลุ่ม"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>{copiedLink ? 'คัดลอกแล้ว!' : 'แชร์เข้า LINE'}</span>
+              </button>
+              <button
+                onClick={() => setShowAnnounceForm(!showAnnounceForm)}
+                className="flex items-center gap-1 text-fine text-ink border-b border-brass pb-0.5 hover:text-brass transition-colors font-medium"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                โพสต์ข้อความ
+              </button>
+            </div>
           </div>
 
           {showAnnounceForm && (
@@ -282,17 +458,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                 className="w-full text-body p-3 rounded-ctl border border-mist-deep bg-mist/40 focus:outline-none focus:border-brass"
               />
               <div className="flex items-center justify-between gap-3">
-                <input
-                  type="text"
-                  value={announcementAuthor}
-                  onChange={(e) => setAnnouncementAuthor(e.target.value)}
-                  placeholder="ชื่อผู้โพสต์"
-                  className="text-fine py-2 px-3 bg-mist/40 border border-mist-deep rounded-ctl w-40 focus:outline-none focus:border-brass"
-                />
+                <div className="flex items-center gap-2">
+                  <span className="text-fine text-stone">ผู้โพสต์:</span>
+                  <input
+                    type="text"
+                    value={announcementAuthor}
+                    onChange={(e) => setAnnouncementAuthor(e.target.value)}
+                    placeholder="ชื่อผู้โพสต์"
+                    className="text-fine py-1.5 px-3 bg-mist/60 border border-mist-deep rounded-ctl w-36 focus:outline-none focus:border-brass text-ink font-medium"
+                  />
+                </div>
                 <button
                   type="submit"
                   disabled={!newAnnouncement.trim()}
-                  className="flex items-center gap-2 px-5 py-2 text-fine text-paper bg-ink hover:bg-moss disabled:opacity-40 rounded-ctl transition-colors"
+                  className="flex items-center gap-2 px-5 py-2 text-fine text-paper bg-ink hover:bg-moss disabled:opacity-40 rounded-ctl transition-colors cursor-pointer"
                 >
                   <Send className="w-3.5 h-3.5" />
                   โพสต์

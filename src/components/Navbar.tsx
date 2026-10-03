@@ -45,22 +45,51 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
 
-  const navItems = [
-    { id: 'overview', label: 'ภาพรวม' },
-    { id: 'dayof', label: 'วันเดินทาง' },
-    { id: 'cars', label: 'รถ และที่นั่ง' },
-    { id: 'stay', label: 'ที่พัก' },
-    { id: 'itinerary', label: 'ตารางเที่ยว' },
-    { id: 'food', label: 'เมนูอาหาร' },
-    { id: 'expenses', label: 'งบและหารเงิน' },
-    { id: 'packing', label: 'ของที่ต้องเตรียม' },
-    { id: 'board', label: 'บอร์ดรวม' },
-    { id: 'members', label: `เพื่อน ${confirmedCount}` },
+  const navCategories = [
+    {
+      id: 'main',
+      label: 'หน้าหลัก',
+      items: [
+        { id: 'overview', label: 'ภาพรวม' },
+        { id: 'dayof', label: 'วันเดินทาง', badge: '🚗' },
+      ],
+    },
+    {
+      id: 'plan',
+      label: 'เตรียมทริป',
+      items: [
+        { id: 'stay', label: 'ที่พัก' },
+        { id: 'cars', label: 'รถ และที่นั่ง' },
+        { id: 'members', label: `เพื่อน (${confirmedCount})` },
+      ],
+    },
+    {
+      id: 'itinerary',
+      label: 'แผนเที่ยว & กิน',
+      items: [
+        { id: 'itinerary', label: 'ตารางเที่ยว' },
+        { id: 'food', label: 'เมนูอาหาร' },
+      ],
+    },
+    {
+      id: 'manage',
+      label: 'จัดการ',
+      items: [
+        { id: 'expenses', label: 'งบและหารเงิน' },
+        { id: 'packing', label: 'ของเตรียม' },
+        { id: 'board', label: 'บอร์ดรวม' },
+      ],
+    },
   ];
+
+  // Detect which category is currently active
+  const activeCategory =
+    navCategories.find((cat) => cat.items.some((item) => item.id === activeTab)) ||
+    navCategories[0];
 
   return (
     <header className="sticky top-0 z-40 bg-mist/95 backdrop-blur-sm border-b border-mist-deep">
-      <div className="max-w-6xl mx-auto px-5 sm:px-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-8">
         <div className="flex items-center justify-between h-16 sm:h-20">
           <button
             onClick={() => setActiveTab('overview')}
@@ -77,7 +106,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </button>
 
-          <div className="flex items-center gap-4 sm:gap-6">
+          <div className="flex items-center gap-3 sm:gap-6">
             <button
               onClick={onOpenSyncModal}
               title={
@@ -88,7 +117,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               className="flex items-center gap-2 text-fine text-stone hover:text-ink transition-colors"
             >
               <span
-                className={`w-1.5 h-1.5 ${isFirebase ? 'bg-moss' : 'bg-brass'}`}
+                className={`w-1.5 h-1.5 rounded-full ${isFirebase ? 'bg-moss' : 'bg-brass'}`}
                 aria-hidden="true"
               />
               <span className="hidden sm:inline">
@@ -98,7 +127,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             <button
               onClick={() => setIsPickerOpen(true)}
-              className="text-fine text-ink border-b border-brass pb-0.5 hover:text-brass transition-colors"
+              className="text-fine text-ink border-b border-brass pb-0.5 hover:text-brass transition-colors font-medium"
             >
               {me ? me.nickname : 'คุณคือใคร'}
             </button>
@@ -112,7 +141,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             <button
               onClick={onOpenSyncModal}
-              className="text-stone hover:text-ink transition-colors"
+              className="text-stone hover:text-ink transition-colors p-1"
               title="ตั้งค่าการซิงก์ข้อมูล"
             >
               <Settings2 className="w-4 h-4" />
@@ -120,25 +149,90 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
 
-        <nav className="flex gap-6 sm:gap-8 overflow-x-auto no-scrollbar -mb-px">
-          {navItems.map((item) => {
-            const isActive = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                aria-current={isActive ? 'page' : undefined}
-                className={`shrink-0 pb-3 pt-1 text-fine sm:text-body whitespace-nowrap border-b-2 transition-colors ${
-                  isActive
-                    ? 'border-brass text-ink'
-                    : 'border-transparent text-stone hover:text-ink'
-                }`}
-              >
-                {item.label}
-              </button>
-            );
-          })}
+        {/* Desktop Navigation: 4 clean logical groups with dividers */}
+        <nav className="hidden sm:flex items-center gap-4 overflow-x-auto no-scrollbar -mb-px pb-3">
+          {navCategories.map((cat, catIdx) => (
+            <div key={cat.id} className="flex items-center gap-1.5 shrink-0">
+              {catIdx > 0 && (
+                <span className="h-4 w-px bg-mist-deep mx-2 shrink-0" aria-hidden="true" />
+              )}
+              <div className="flex items-center gap-1">
+                {cat.items.map((item) => {
+                  const isActive = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id)}
+                      aria-current={isActive ? 'page' : undefined}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-fine sm:text-body rounded-ctl whitespace-nowrap transition-colors ${
+                        isActive
+                          ? 'bg-ink text-paper font-medium shadow-sm'
+                          : 'text-stone hover:text-ink hover:bg-mist-deep/40'
+                      }`}
+                    >
+                      <span>{item.label}</span>
+                      {item.badge && (
+                        <span
+                          className={`text-[10px] px-1 py-0.2 rounded ${
+                            isActive
+                              ? 'bg-brass text-ink font-semibold'
+                              : 'bg-mist-deep/70 text-stone'
+                          }`}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
+
+        {/* Mobile Navigation: Category Selector + Focused Sub-tabs */}
+        <div className="sm:hidden pb-3 pt-1 space-y-2">
+          {/* Tier 1: Category Chips */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar border-b border-mist-deep pb-2">
+            {navCategories.map((cat) => {
+              const isCatActive = activeCategory.id === cat.id;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveTab(cat.items[0].id)}
+                  className={`text-fine px-2.5 py-1 rounded-full whitespace-nowrap transition-colors ${
+                    isCatActive
+                      ? 'bg-ink text-paper font-medium'
+                      : 'bg-paper text-stone border border-mist-deep hover:text-ink'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tier 2: Sub-tabs within Active Category */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+            {activeCategory.items.map((item) => {
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`text-fine px-3 py-1.5 rounded-ctl whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                    isActive
+                      ? 'bg-brass text-ink font-medium shadow-sm'
+                      : 'bg-paper text-stone border border-mist-deep hover:text-ink'
+                  }`}
+                >
+                  <span>{item.label}</span>
+                  {item.badge && <span>{item.badge}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {syncError && (

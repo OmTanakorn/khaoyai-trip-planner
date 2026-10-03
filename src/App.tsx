@@ -12,6 +12,7 @@ import { DayOfTab } from './components/DayOfTab';
 import { BoardTab } from './components/BoardTab';
 import { SyncModal } from './components/SyncModal';
 import { ShareModal } from './components/ShareModal';
+import { TripSecretary } from './components/TripSecretary';
 import { TripData, Member, TripListName } from './types/trip';
 import { initialTripData } from './data/initialData';
 import {
@@ -230,8 +231,9 @@ export function App() {
           <CarsTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
-        onSaveItem={handleSaveItem}
-        onRemoveItem={handleRemoveItem}
+            onSaveItem={handleSaveItem}
+            onRemoveItem={handleRemoveItem}
+            me={me}
           />
         )}
 
@@ -279,8 +281,9 @@ export function App() {
           <PackingTab
             trip={trip}
             onUpdateTrip={handleUpdateTrip}
-        onSaveItem={handleSaveItem}
-        onRemoveItem={handleRemoveItem}
+            onSaveItem={handleSaveItem}
+            onRemoveItem={handleRemoveItem}
+            me={me}
           />
         )}
 
@@ -340,6 +343,15 @@ export function App() {
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
         trip={trip}
+      />
+
+      {/* AI Secretary Floating Assistant */}
+      <TripSecretary
+        trip={trip}
+        me={me}
+        setActiveTab={setActiveTab}
+        onSaveItem={handleSaveItem}
+        onRemoveItem={handleRemoveItem}
       />
     </div>
   );

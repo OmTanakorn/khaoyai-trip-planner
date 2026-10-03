@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Check, Plus, Trash2 } from 'lucide-react';
-import { TripData, PackingItem, TripListEditor } from '../types/trip';
+import { TripData, PackingItem, Member, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Empty, Meter } from './ui';
 import { input, btnSolid } from './ui-kit';
@@ -8,12 +8,13 @@ import { input, btnSolid } from './ui-kit';
 interface PackingTabProps extends TripListEditor {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
+  me: Member | null;
 }
 
-export const PackingTab: React.FC<PackingTabProps> = ({ trip, onSaveItem, onRemoveItem }) => {
+export const PackingTab: React.FC<PackingTabProps> = ({ trip, onSaveItem, onRemoveItem, me }) => {
   const [newItemTitle, setNewItemTitle] = useState('');
   const [newItemCategory, setNewItemCategory] = useState<'shared' | 'personal'>('shared');
-  const [newItemAssignedTo, setNewItemAssignedTo] = useState('');
+  const [newItemAssignedTo, setNewItemAssignedTo] = useState(me?.id || '');
   const [activeFilter, setActiveFilter] = useState<'all' | 'shared' | 'personal' | 'menu'>(
     'all'
   );
@@ -205,19 +206,34 @@ export const PackingTab: React.FC<PackingTabProps> = ({ trip, onSaveItem, onRemo
                 </div>
 
                 {item.category === 'shared' && (
-                  <select
-                    value={item.assignedMemberId || ''}
-                    onChange={(e) => handleAssignMember(item.id, e.target.value)}
-                    aria-label={`คนที่เตรียม ${item.title}`}
-                    className="text-fine py-1.5 px-2 rounded-ctl border border-mist-deep bg-mist/40 text-ink focus:outline-none focus:border-brass"
-                  >
-                    <option value="">ยังไม่มีคนรับ</option>
-                    {trip.members.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.nickname}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center gap-2">
+                    {me && !item.assignedMemberId && (
+                      <button
+                        onClick={() => handleAssignMember(item.id, me.id)}
+                        className="px-2.5 py-1 bg-brass hover:bg-brass-lit text-ink text-fine font-medium rounded-ctl transition-colors shadow-sm whitespace-nowrap cursor-pointer"
+                      >
+                        + ฉันเตรียมเอง
+                      </button>
+                    )}
+                    {me && item.assignedMemberId === me.id && (
+                      <span className="text-[12px] px-2 py-0.5 rounded bg-moss/20 text-moss font-medium whitespace-nowrap">
+                        คุณเตรียม
+                      </span>
+                    )}
+                    <select
+                      value={item.assignedMemberId || ''}
+                      onChange={(e) => handleAssignMember(item.id, e.target.value)}
+                      aria-label={`คนที่เตรียม ${item.title}`}
+                      className="text-fine py-1.5 px-2 rounded-ctl border border-mist-deep bg-mist/40 text-ink focus:outline-none focus:border-brass"
+                    >
+                      <option value="">ยังไม่มีคนรับ</option>
+                      {trip.members.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.nickname} {me && m.id === me.id ? '(คุณ)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 )}
 
                 <button

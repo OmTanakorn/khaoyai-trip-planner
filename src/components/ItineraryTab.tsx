@@ -50,8 +50,18 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onSaveItem, on
   const [ideaCategory, setIdeaCategory] = useState<PlaceIdea['category']>('cafe');
   const [ideaLocation, setIdeaLocation] = useState('');
   const [ideaMapUrl, setIdeaMapUrl] = useState('');
-  const [ideaSuggestedBy, setIdeaSuggestedBy] = useState('');
+  const [ideaSuggestedBy, setIdeaSuggestedBy] = useState(me?.nickname || '');
   const [ideaNotes, setIdeaNotes] = useState('');
+
+  const openWishlistModal = () => {
+    setIdeaTitle('');
+    setIdeaCategory('cafe');
+    setIdeaLocation('');
+    setIdeaMapUrl('');
+    setIdeaNotes('');
+    setIdeaSuggestedBy(me?.nickname || '');
+    setIsWishlistModalOpen(true);
+  };
 
   const rawDay =
     trip.itinerary.find((d) => d.dayNumber === selectedDayNumber) || trip.itinerary[0];
@@ -194,7 +204,7 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onSaveItem, on
         note="สองวันหนึ่งคืน เสนอที่ที่อยากไปไว้ก่อน แล้วค่อยดึงลงตารางเมื่อตกลงกันได้"
         action={
           <div className="flex gap-3">
-            <button onClick={() => setIsWishlistModalOpen(true)} className={btnQuiet}>
+            <button onClick={openWishlistModal} className={btnQuiet}>
               เสนอที่เที่ยว
             </button>
             <button onClick={handleOpenNewActivityModal} className={btnSolid}>
@@ -216,7 +226,7 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onSaveItem, on
             title="ยังไม่มีใครเสนอที่เที่ยว"
             note="ไร่องุ่น PB Valley, อุทยานแห่งชาติเขาใหญ่, คาเฟ่แถวถนนธนะรัชต์ หรือที่ไหนก็ได้ที่อยากแวะ"
             action={
-              <button onClick={() => setIsWishlistModalOpen(true)} className={btnLink}>
+              <button onClick={openWishlistModal} className={btnLink}>
                 <Plus className="w-3.5 h-3.5" />
                 เสนอที่แรก
               </button>

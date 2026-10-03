@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Pencil, X } from 'lucide-react';
-import { TripData, Car, TripListEditor } from '../types/trip';
+import { TripData, Car, Member, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Tag, Meter } from './ui';
 import { input, btnSolid, btnQuiet, btnLink } from './ui-kit';
@@ -8,9 +8,10 @@ import { input, btnSolid, btnQuiet, btnLink } from './ui-kit';
 interface CarsTabProps extends TripListEditor {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
+  me: Member | null;
 }
 
-export const CarsTab: React.FC<CarsTabProps> = ({ trip, onSaveItem, onRemoveItem }) => {
+export const CarsTab: React.FC<CarsTabProps> = ({ trip, onSaveItem, onRemoveItem, me }) => {
   const [editingCar, setEditingCar] = useState<Car | null>(null);
   const [isNewCarModalOpen, setIsNewCarModalOpen] = useState(false);
   const [assignPassengerModalCarId, setAssignPassengerModalCarId] = useState<string | null>(null);
@@ -35,7 +36,7 @@ export const CarsTab: React.FC<CarsTabProps> = ({ trip, onSaveItem, onRemoveItem
 
   const handleOpenNewModal = () => {
     setEditingCar(null);
-    setDriverName('');
+    setDriverName(me ? me.nickname : '');
     setCarModel('');
     setLicensePlate('');
     setMaxSeats(5);
@@ -252,15 +253,52 @@ export const CarsTab: React.FC<CarsTabProps> = ({ trip, onSaveItem, onRemoveItem
                     );
                   })}
 
-                  {!isFull && (
-                    <button
-                      disabled={trip.members.filter((m) => m.status === 'confirmed').length === 0}
-                      onClick={() => setAssignPassengerModalCarId(car.id)}
-                      className={`${btnLink} disabled:opacity-40 disabled:pointer-events-none`}
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      เลือกเพื่อนขึ้นคันนี้
-                    </button>
+                  {/* 1-click personal seat action */}
+                  {me ? (
+                    <div className="w-full flex items-center justify-between gap-3 pt-3 mt-1 border-t border-mist-deep/60">
+                      {car.passengerIds.includes(me.id) ? (
+                        <div className="flex items-center gap-2 bg-moss/10 border border-moss/30 px-3 py-1.5 rounded-ctl">
+                          <span className="text-fine text-moss font-medium">✓ คุณนั่งคันนี้</span>
+                          <button
+                            onClick={() => handleRemovePassenger(car.id, me.id)}
+                            className="text-fine text-stone hover:text-ink underline ml-1 cursor-pointer"
+                          >
+                            สละที่นั่ง
+                          </button>
+                        </div>
+                      ) : !isFull ? (
+                        <button
+                          onClick={() => handleAddPassengerToCar(car.id, me.id)}
+                          className="px-3.5 py-1.5 bg-brass hover:bg-brass-lit text-ink text-fine font-medium rounded-ctl transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
+                        >
+                          🚗 ขอนั่งคันนี้
+                        </button>
+                      ) : (
+                        <span className="text-fine text-stone italic">คันนี้เต็มแล้ว</span>
+                      )}
+
+                      {!isFull && (
+                        <button
+                          disabled={trip.members.filter((m) => m.status === 'confirmed').length === 0}
+                          onClick={() => setAssignPassengerModalCarId(car.id)}
+                          className={`${btnLink} text-stone hover:text-ink ml-auto`}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          เลือกให้เพื่อน
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    !isFull && (
+                      <button
+                        disabled={trip.members.filter((m) => m.status === 'confirmed').length === 0}
+                        onClick={() => setAssignPassengerModalCarId(car.id)}
+                        className={`${btnLink} disabled:opacity-40 disabled:pointer-events-none`}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        เลือกเพื่อนขึ้นคันนี้
+                      </button>
+                    )
                   )}
                 </div>
               </article>
@@ -276,11 +314,16 @@ export const CarsTab: React.FC<CarsTabProps> = ({ trip, onSaveItem, onRemoveItem
           onClose={() => setAssignPassengerModalCarId(null)}
         >
           <ul className="divide-y divide-mist-deep max-h-72 overflow-y-auto">
-            {trip.members
-              .filter((m) => m.status === 'confirmed')
+            {[...trip.members.filter((m) => m.status === 'confirmed')]
+              .sort((a, b) => {
+                if (me && a.id === me.id) return -1;
+                if (me && b.id === me.id) return 1;
+                return 0;
+              })
               .map((member) => {
                 const currentCar = trip.cars.find((c) => c.passengerIds.includes(member.id));
                 const isCurrent = currentCar?.id === assignPassengerModalCarId;
+                const isMe = me && member.id === me.id;
 
                 return (
                   <li key={member.id}>
@@ -289,7 +332,9 @@ export const CarsTab: React.FC<CarsTabProps> = ({ trip, onSaveItem, onRemoveItem
                         handleAddPassengerToCar(assignPassengerModalCarId, member.id)
                       }
                       disabled={isCurrent}
-                      className="w-full flex items-center justify-between gap-4 py-3 text-left disabled:opacity-50 group"
+                      className={`w-full flex items-center justify-between gap-4 py-3 text-left disabled:opacity-50 group ${
+                        isMe ? 'bg-brass/5 px-2 -mx-2 rounded' : ''
+                      }`}
                     >
                       <span className="inline-flex items-center gap-2.5 text-body text-ink group-hover:text-brass transition-colors">
                         <span
@@ -298,6 +343,11 @@ export const CarsTab: React.FC<CarsTabProps> = ({ trip, onSaveItem, onRemoveItem
                           aria-hidden="true"
                         />
                         {member.nickname}
+                        {isMe && (
+                          <span className="text-[11px] px-1.5 py-0.2 rounded bg-brass text-ink font-medium">
+                            คุณ
+                          </span>
+                        )}
                       </span>
                       <span className="text-fine text-stone">
                         {isCurrent
