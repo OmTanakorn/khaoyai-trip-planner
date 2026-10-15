@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Pencil, ExternalLink } from 'lucide-react';
+import { Plus, Trash2, Pencil, ExternalLink, Car, MapPinned } from 'lucide-react';
 import { TripData, Activity, PlaceIdea, Member, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty } from './ui';
 import { input, btnSolid, btnQuiet, btnLink } from './ui-kit';
+import { routeOfDay, zoneById, formatMinutes, googleMapsRouteUrl } from '../services/route';
 
 interface ItineraryTabProps extends TripListEditor {
   trip: TripData;
@@ -72,6 +73,9 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onSaveItem, on
       (a, b) => startMinutes(a.time) - startMinutes(b.time)
     ),
   };
+
+  const route = currentDay ? routeOfDay(currentDay) : null;
+  const mapsUrl = currentDay ? googleMapsRouteUrl(currentDay.activities) : null;
 
   const handleOpenNewActivityModal = () => {
     setEditingActivity(null);
@@ -215,7 +219,7 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onSaveItem, on
       />
 
       {/* Wishlist — candidates, not yet a schedule */}
-      <Panel className="mb-px">
+      <Panel className="mb-3">
         <div className="flex items-baseline justify-between gap-4 border-b border-mist-deep pb-5">
           <h2 className="font-display text-lead text-ink">ที่ที่เพื่อนเสนอมา</h2>
           <span className="text-fine text-stone">{trip.placeIdeas.length} แห่ง</span>
@@ -293,7 +297,7 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onSaveItem, on
       </Panel>
 
       {/* Day switch */}
-      <div className="bg-paper flex gap-8 px-6 sm:px-8 border-b border-mist-deep overflow-x-auto no-scrollbar">
+      <div className="bg-paper rounded-t-panel flex gap-8 px-6 sm:px-8 border-b border-mist-deep overflow-x-auto no-scrollbar">
         {trip.itinerary.map((day) => {
           const isActive = day.dayNumber === selectedDayNumber;
           return (
@@ -318,7 +322,7 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onSaveItem, on
 
       {/* Timeline — a real sequence, so it gets a rail */}
       {currentDay && (
-        <div className="bg-paper px-6 sm:px-8 py-8">
+        <div className="bg-paper rounded-b-panel px-6 sm:px-8 py-8">
           {currentDay.activities.length === 0 ? (
             <Empty
               title={`ยังไม่มีอะไรใน${currentDay.dayLabel}`}
@@ -331,11 +335,27 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onSaveItem, on
               }
             />
           ) : (
+            <>
             <ol className="relative border-l border-mist-deep">
-              {currentDay.activities.map((act) => (
+              {currentDay.activities.map((act, i) => {
+                const stop = route?.stops[i];
+                const previousZone = route?.stops
+                  .slice(0, i)
+                  .reverse()
+                  .find((s) => s.zone)?.zone;
+                const showLeg =
+                  stop?.legMinutes != null && previousZone && previousZone !== stop.zone;
+                return (
                 <li key={act.id} className="relative pl-6 sm:pl-8 pb-8 last:pb-0">
+                  {showLeg && (
+                    <p className="-mt-4 mb-4 flex items-center gap-2 text-fine text-stone">
+                      <Car className="w-3.5 h-3.5 text-brass" aria-hidden="true" />
+                      ขับ ≈ {formatMinutes(stop.legMinutes!)} ไป{zoneById(stop.zone!).name}
+                    </p>
+                  )}
                   <span
-                    className="absolute -left-[3px] top-2 w-1.5 h-1.5 bg-brass"
+                    className="absolute -left-[4px] w-2 h-2 rounded-full bg-ink ring-4 ring-paper"
+                    style={{ top: showLeg ? '1.85rem' : '0.45rem' }}
                     aria-hidden="true"
                   />
 
@@ -380,8 +400,42 @@ export const ItineraryTab: React.FC<ItineraryTabProps> = ({ trip, onSaveItem, on
                     </div>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ol>
+
+            {route && (
+              <div className="mt-8 pt-5 border-t border-mist-deep/70 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="text-body text-ink">
+                    ขับรวมราว <span className="font-semibold">{formatMinutes(route.driveMinutes)}</span>
+                  </p>
+                  {route.backtracks.length > 0 && (
+                    <p className="text-fine text-brass">
+                      วนกลับไป{route.backtracks.map((z) => zoneById(z).name).join(' และ ')}อีกรอบ
+                      ลองย้ายจุดแวะในโซนเดียวกันมาไว้ติดกัน
+                    </p>
+                  )}
+                  {route.unplaced > 0 && (
+                    <p className="text-fine text-stone">
+                      {route.unplaced} จุดยังไม่รู้ว่าอยู่โซนไหน ใส่ชื่อถนนหรืออำเภอในช่องสถานที่
+                    </p>
+                  )}
+                </div>
+                {mapsUrl && (
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`${btnSolid} inline-flex items-center gap-2 self-start`}
+                  >
+                    <MapPinned className="w-4 h-4" aria-hidden="true" />
+                    เปิดใน Google Maps
+                  </a>
+                )}
+              </div>
+            )}
+            </>
           )}
         </div>
       )}

@@ -66,7 +66,7 @@ export const WelcomeGate: React.FC<WelcomeGateProps> = ({
         <p className="text-fine text-stone">{trip.destination}</p>
         <h1 className="mt-3 font-display text-title text-ink">{trip.title}</h1>
 
-        <form onSubmit={handleSubmit} className="mt-10 bg-paper px-6 sm:px-8 py-8">
+        <form onSubmit={handleSubmit} className="mt-10 bg-paper rounded-panel px-6 sm:px-8 py-8">
           <h2 className="font-display text-lead text-ink">คุณคือใคร</h2>
           <p className="mt-2 text-fine text-stone">
             ใส่ชื่อเล่นไว้ครั้งเดียว เครื่องนี้จะจำให้ตลอด
@@ -111,7 +111,7 @@ export const WelcomeGate: React.FC<WelcomeGateProps> = ({
                       className="inline-flex items-center gap-2 text-body text-ink hover:text-brass transition-colors"
                     >
                       <span
-                        className="w-1.5 h-1.5"
+                        className="w-1.5 h-1.5 rounded-full"
                         style={{ backgroundColor: member.avatarColor }}
                         aria-hidden="true"
                       />

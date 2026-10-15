@@ -58,7 +58,7 @@ const LedgerRow: React.FC<{ balance: Balance; member?: Member }> = ({ balance, m
       <div className="flex items-baseline justify-between gap-4">
         <span className="inline-flex items-center gap-2.5 min-w-0">
           <span
-            className="w-1.5 h-1.5 shrink-0"
+            className="w-1.5 h-1.5 rounded-full shrink-0"
             style={{ backgroundColor: member?.avatarColor }}
             aria-hidden="true"
           />
@@ -320,7 +320,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRe
       />
 
       {/* The one loud element on this page: the running total. */}
-      <div className="bg-ink px-6 sm:px-8 py-10 mb-px">
+      <div className="bg-ink rounded-panel px-6 sm:px-8 py-10 mb-3">
         <p className="text-fine text-brass-lit">ใช้ไปแล้วทั้งทริป</p>
         <p className="mt-3 font-display text-display sm:text-[4rem] leading-none text-paper">
           {baht(totalExpense)}
@@ -337,7 +337,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRe
       </div>
 
       {/* Two views, one at a time: what we spent, and who owes whom. */}
-      <div className="bg-paper px-6 sm:px-8 mb-px">
+      <div className="bg-paper rounded-panel px-6 sm:px-8 mb-3">
         <nav className="flex gap-8">
           {([
             { id: 'list', label: `รายการที่จ่ายไป ${trip.expenses.length}` },
@@ -362,7 +362,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRe
       {view === 'list' && (
         <>
           {categoryGroups.length > 0 && (
-            <Panel className="mb-px">
+            <Panel className="mb-3">
               <details>
                 <summary className="text-fine text-stone cursor-pointer hover:text-ink">
                   เงินหมดไปกับอะไร · {categoryGroups.length} หมวด
@@ -521,7 +521,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({ trip, onSaveItem, onRe
 
       {view === 'settle' && (
         <>
-          <Panel className="mb-px">
+          <Panel className="mb-3">
             <h2 className="font-display text-lead text-ink">ใครโอนให้ใคร</h2>
             <p className="mt-2 text-fine text-stone border-b border-mist-deep pb-5">
               คิดจากทุกรายการที่บันทึกไว้ ณ ตอนนี้ โอนตามนี้แล้วจบ ไม่ต้องคิดต่อ

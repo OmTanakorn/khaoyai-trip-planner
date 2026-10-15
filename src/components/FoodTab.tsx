@@ -220,7 +220,7 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
       />
 
       {/* Where the vote stands right now */}
-      <Panel className="mb-px">
+      <Panel className="mb-3">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-8">
           <div>
             <p className="text-fine text-stone">เมนูที่เสนอมา</p>
@@ -285,7 +285,7 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
         </Panel>
       ) : (
         groups.map((group) => (
-          <Panel key={group.meal} className="mb-px">
+          <Panel key={group.meal} className="mb-3">
             <div className="flex items-baseline justify-between gap-4 border-b border-mist-deep pb-5">
               <h2 className="font-display text-lead text-ink">{MEAL_LABEL[group.meal]}</h2>
               <span className="text-fine text-stone">{group.items.length} เมนู</span>

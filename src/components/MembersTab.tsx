@@ -193,7 +193,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
           />
         </Panel>
       ) : (
-        <ul className="bg-paper divide-y divide-mist-deep">
+        <ul className="bg-paper rounded-panel overflow-hidden divide-y divide-mist-deep/70">
           {trip.members.map((member) => {
             const memberCar = trip.cars.find((c) => c.passengerIds.includes(member.id));
             const memberRoom = trip.confirmedAccommodation?.rooms.find((r) =>

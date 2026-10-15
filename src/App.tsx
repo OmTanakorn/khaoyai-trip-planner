@@ -210,11 +210,7 @@ export function App() {
       />
 
       {/* Main Content Area */}
-      <main
-        className={`flex-1 max-w-6xl w-full mx-auto ${
-          activeTab === 'overview' ? '' : 'px-5 sm:px-8 pt-8'
-        }`}
-      >
+      <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-8 pt-3 sm:pt-6">
         {activeTab === 'overview' && (
           <OverviewTab
             trip={trip}
@@ -224,6 +220,9 @@ export function App() {
             setActiveTab={setActiveTab}
             me={me}
             onChooseMe={chooseMyMember}
+            onShare={() => setIsShareModalOpen(true)}
+            onOpenSync={() => setIsSyncModalOpen(true)}
+            isFirebase={isFirebase}
           />
         )}
 
@@ -308,9 +307,9 @@ export function App() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-mist-deep mt-px">
-        <div className="max-w-6xl mx-auto px-5 sm:px-8 py-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-fine text-stone">
-          <p>{trip.title} · วางแผนร่วมกันของแก๊ง 10–12 คน</p>
+      <footer>
+        <div className="max-w-6xl mx-auto px-5 sm:px-8 pt-4 pb-24 sm:pb-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-fine text-stone">
+          <p>{trip.title} แผนของแก๊ง 10–12 คน</p>
           <div className="flex items-center gap-6">
             <button
               onClick={() => setIsShareModalOpen(true)}

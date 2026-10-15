@@ -143,7 +143,7 @@ export const BoardTab: React.FC<BoardTabProps> = ({ trip, onUpdateTrip }) => {
             title="บอร์ดรวม"
             allow="clipboard-read; clipboard-write; fullscreen"
             allowFullScreen
-            className="block w-full h-[75vh] min-h-[420px] bg-paper border border-mist-deep"
+            className="block w-full h-[75vh] min-h-[420px] bg-paper rounded-panel"
           />
           <p className="mt-3 text-fine text-stone">
             ถ้าบอร์ดไม่ขึ้นหรือแก้ไม่ได้ ให้ล็อกอิน Miro ในกรอบ หรือกด “เปิดในแท็บใหม่” ด้านบน

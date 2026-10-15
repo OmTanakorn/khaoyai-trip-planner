@@ -97,7 +97,7 @@ export const PackingTab: React.FC<PackingTabProps> = ({ trip, onSaveItem, onRemo
         }
       />
 
-      <Panel className="mb-px">
+      <Panel className="mb-3">
         <form onSubmit={handleAddItem} className="flex flex-col lg:flex-row gap-3">
           <input
             type="text"
@@ -144,7 +144,7 @@ export const PackingTab: React.FC<PackingTabProps> = ({ trip, onSaveItem, onRemo
         </form>
       </Panel>
 
-      <div className="bg-paper">
+      <div className="bg-paper rounded-panel overflow-hidden">
         <div className="flex gap-6 px-6 sm:px-8 border-b border-mist-deep">
           {filters.map((f) => (
             <button
@@ -210,7 +210,7 @@ export const PackingTab: React.FC<PackingTabProps> = ({ trip, onSaveItem, onRemo
                     {me && !item.assignedMemberId && (
                       <button
                         onClick={() => handleAssignMember(item.id, me.id)}
-                        className="px-2.5 py-1 bg-brass hover:bg-brass-lit text-ink text-fine font-medium rounded-ctl transition-colors shadow-sm whitespace-nowrap cursor-pointer"
+                        className="px-2.5 py-1 bg-brass hover:bg-brass-lit text-ink text-fine font-medium rounded-ctl transition-colors whitespace-nowrap cursor-pointer"
                       >
                         + ฉันเตรียมเอง
                       </button>

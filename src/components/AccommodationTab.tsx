@@ -215,7 +215,7 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({
           }
         />
 
-        <div className="bg-ink px-6 sm:px-8 py-10 mb-px">
+        <div className="bg-ink rounded-panel px-6 sm:px-8 py-10 mb-3">
           <p className="text-fine text-brass-lit">ที่พักของทริปนี้</p>
           <h2 className="mt-3 font-display text-title sm:text-display leading-tight text-paper max-w-2xl">
             {stay.name}
@@ -274,7 +274,7 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({
                     return (
                       <span key={id} className="inline-flex items-center gap-1.5 text-fine text-ink">
                         <span
-                          className="w-1.5 h-1.5"
+                          className="w-1.5 h-1.5 rounded-full"
                           style={{ backgroundColor: guest?.avatarColor || '#2f4a3c' }}
                           aria-hidden="true"
                         />
@@ -306,7 +306,7 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({
                       ) : room.guestIds.length < room.capacity ? (
                         <button
                           onClick={() => handleAssignGuest(room.id, me.id)}
-                          className="px-3.5 py-1.5 bg-brass hover:bg-brass-lit text-ink text-fine font-medium rounded-ctl transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
+                          className="px-3.5 py-1.5 bg-brass hover:bg-brass-lit text-ink text-fine font-medium rounded-ctl transition-colors flex items-center gap-1.5 cursor-pointer"
                         >
                           🛏️ ขอนอนห้องนี้
                         </button>
@@ -378,7 +378,7 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({
                       >
                         <span className="inline-flex items-center gap-2.5 text-body text-ink group-hover:text-brass transition-colors">
                           <span
-                            className="w-1.5 h-1.5"
+                            className="w-1.5 h-1.5 rounded-full"
                             style={{ backgroundColor: member.avatarColor }}
                             aria-hidden="true"
                           />
@@ -427,7 +427,7 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({
       />
 
       {!me && (
-        <Panel className="mb-px">
+        <Panel className="mb-3">
           <p className="text-body text-stone">
             เลือกชื่อคุณที่มุมขวาบนก่อน แล้วจึงจะโหวตได้ เพื่อนจะได้รู้ว่าใครเลือกอะไร
           </p>
@@ -448,7 +448,7 @@ export const AccommodationTab: React.FC<AccommodationTabProps> = ({
           />
         </Panel>
       ) : (
-        <div className="bg-paper divide-y divide-mist-deep">
+        <div className="bg-paper rounded-panel overflow-hidden divide-y divide-mist-deep/70">
           {trip.accommodationOptions.map((option) => {
             const estPerPerson = Math.round(option.pricePerNight / confirmedCount);
             const isVoted = !!me && option.votes.includes(me.id);

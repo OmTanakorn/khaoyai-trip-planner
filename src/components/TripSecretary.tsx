@@ -633,7 +633,7 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
         {!isOpen && (
           <button
             onClick={() => setIsOpen(true)}
-            className="group flex items-center gap-2.5 px-4 py-3 bg-ink hover:bg-moss text-paper border border-brass/50 rounded-full shadow-2xl transition-all hover:scale-105 cursor-pointer"
+            className="group flex items-center gap-2.5 px-4 py-3 bg-ink hover:bg-ink-soft text-paper rounded-full shadow-lg shadow-ink/25 transition-colors cursor-pointer"
           >
             <span className="relative flex h-3 w-3">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brass opacity-75" />
@@ -653,7 +653,7 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
           role="dialog"
           aria-label="แผงพูดคุยกับเลขาทริป AI"
           aria-modal="true"
-          className="fixed inset-y-0 right-0 z-50 w-full sm:w-[500px] bg-paper shadow-2xl border-l border-mist-deep flex flex-col animate-in slide-in-from-right duration-300"
+          className="fixed inset-y-0 right-0 z-50 w-full sm:w-[500px] bg-paper shadow-[-24px_0_48px_-24px_rgba(27,59,43,0.18)] flex flex-col animate-in slide-in-from-right duration-300"
         >
           {/* Header */}
           <div className="px-5 py-4 bg-ink text-paper flex items-center justify-between border-b border-paper/10">
@@ -895,7 +895,7 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
                 <div className="flex gap-2 pt-2">
                   <button
                     type="submit"
-                    className="flex-1 py-2 bg-brass hover:bg-brass-lit text-ink font-medium rounded-ctl transition-colors shadow-sm cursor-pointer"
+                    className="flex-1 py-2 bg-brass hover:bg-brass-lit text-ink font-medium rounded-ctl transition-colors cursor-pointer"
                   >
                     บันทึกการตั้งค่า
                   </button>
@@ -933,31 +933,31 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
           <div className="px-4 py-2.5 bg-mist/60 border-b border-mist-deep flex items-center gap-2 overflow-x-auto no-scrollbar">
             <button
               onClick={() => handleQuickPrompt('brief')}
-              className="px-2.5 py-1 bg-paper hover:bg-brass hover:text-ink text-fine text-ink border border-mist-deep rounded-full whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className="px-2.5 py-1 bg-paper hover:bg-brass hover:text-ink text-fine text-ink border border-mist-deep rounded-full whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               📊 สรุปทริป
             </button>
             <button
               onClick={() => handleQuickPrompt('line')}
-              className="px-2.5 py-1 bg-paper hover:bg-brass hover:text-ink text-fine text-ink border border-mist-deep rounded-full whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className="px-2.5 py-1 bg-paper hover:bg-brass hover:text-ink text-fine text-ink border border-mist-deep rounded-full whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               📢 ร่างส่ง LINE
             </button>
             <button
               onClick={() => handleQuickPrompt('cars')}
-              className="px-2.5 py-1 bg-paper hover:bg-brass hover:text-ink text-fine text-ink border border-mist-deep rounded-full whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className="px-2.5 py-1 bg-paper hover:bg-brass hover:text-ink text-fine text-ink border border-mist-deep rounded-full whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               🚗 ใครยังไม่มีรถ
             </button>
             <button
               onClick={() => handleQuickPrompt('places')}
-              className="px-2.5 py-1 bg-paper hover:bg-brass hover:text-ink text-fine text-ink border border-mist-deep rounded-full whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className="px-2.5 py-1 bg-paper hover:bg-brass hover:text-ink text-fine text-ink border border-mist-deep rounded-full whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               ☕ แนะนำที่เที่ยว
             </button>
             <button
               onClick={() => handleQuickPrompt('packing')}
-              className="px-2.5 py-1 bg-paper hover:bg-brass hover:text-ink text-fine text-ink border border-mist-deep rounded-full whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className="px-2.5 py-1 bg-paper hover:bg-brass hover:text-ink text-fine text-ink border border-mist-deep rounded-full whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer"
             >
               🎒 ของต้องเตรียม
             </button>
@@ -974,7 +974,7 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
                   className={`max-w-[90%] p-3.5 rounded-lg text-body leading-relaxed whitespace-pre-wrap ${
                     msg.sender === 'user'
                       ? 'bg-ink text-paper'
-                      : 'bg-white text-ink border border-mist-deep shadow-xs'
+                      : 'bg-white text-ink border border-mist-deep'
                   }`}
                 >
                   {msg.text}
@@ -989,7 +989,7 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
                             <button
                               key={actId}
                               onClick={() => handleCopyText(act.payload, actId)}
-                              className="px-3 py-1.5 bg-brass hover:bg-brass-lit text-ink text-fine font-medium rounded-ctl transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+                              className="px-3 py-1.5 bg-brass hover:bg-brass-lit text-ink text-fine font-medium rounded-ctl transition-colors flex items-center gap-1.5 cursor-pointer"
                             >
                               {copiedActionId === actId ? (
                                 <>

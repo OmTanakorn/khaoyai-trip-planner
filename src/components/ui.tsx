@@ -8,7 +8,7 @@ import { X } from 'lucide-react';
 export const Panel: React.FC<{ children: React.ReactNode; className?: string }> = ({
   children,
   className = '',
-}) => <section className={`bg-paper px-6 sm:px-8 py-8 ${className}`}>{children}</section>;
+}) => <section className={`bg-paper rounded-panel px-5 sm:px-8 py-7 ${className}`}>{children}</section>;
 
 export const PageHead: React.FC<{
   title: string;
@@ -16,7 +16,7 @@ export const PageHead: React.FC<{
   aside?: React.ReactNode;
   action?: React.ReactNode;
 }> = ({ title, note, aside, action }) => (
-  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-mist-deep pb-6 mb-px">
+  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-6">
     <div>
       <h1 className="font-display text-title text-ink">{title}</h1>
       {note && <p className="mt-2 text-fine text-stone max-w-xl">{note}</p>}
@@ -50,7 +50,7 @@ export const Modal: React.FC<{
   wide?: boolean;
 }> = ({ title, note, onClose, children, wide }) => (
   <div
-    className="fixed inset-0 z-50 bg-ink/70 flex items-center justify-center p-4"
+    className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-[2px] flex items-center justify-center p-4"
     onClick={onClose}
   >
     <div
@@ -58,7 +58,7 @@ export const Modal: React.FC<{
       aria-modal="true"
       aria-label={title}
       onClick={(e) => e.stopPropagation()}
-      className={`bg-paper rounded-ctl w-full ${
+      className={`bg-paper rounded-panel w-full ${
         wide ? 'max-w-2xl' : 'max-w-md'
       } px-6 sm:px-8 py-8 max-h-[90vh] overflow-y-auto`}
     >
@@ -93,7 +93,7 @@ export const Tag: React.FC<{
   }[tone];
   return (
     <span className="inline-flex items-center gap-1.5 text-fine text-stone">
-      <span className={`w-1.5 h-1.5 ${dot}`} aria-hidden="true" />
+      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} aria-hidden="true" />
       {children}
     </span>
   );
@@ -118,9 +118,9 @@ export const Meter: React.FC<{ value: number; max: number; tone?: 'ink' | 'brass
   max,
   tone = 'ink',
 }) => (
-  <div className="h-px w-full bg-mist-deep" role="presentation">
+  <div className="h-1 w-full rounded-full bg-surface overflow-hidden" role="presentation">
     <div
-      className={`h-px ${tone === 'brass' ? 'bg-brass' : 'bg-ink'}`}
+      className={`h-1 rounded-full ${tone === 'brass' ? 'bg-brass' : 'bg-ink'}`}
       style={{ width: `${max > 0 ? Math.min(100, (value / max) * 100) : 0}%` }}
     />
   </div>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Settings2 } from 'lucide-react';
 import { Member } from '../types/trip';
 import { Modal } from './ui';
-import { btnQuiet } from './ui-kit';
+import { btnQuiet, initialOf } from './ui-kit';
 
 interface NavbarProps {
   activeTab: string;
@@ -51,7 +51,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       label: 'หน้าหลัก',
       items: [
         { id: 'overview', label: 'ภาพรวม' },
-        { id: 'dayof', label: 'วันเดินทาง', badge: '🚗' },
+        { id: 'dayof', label: 'วันเดินทาง' },
       ],
     },
     {
@@ -88,25 +88,23 @@ export const Navbar: React.FC<NavbarProps> = ({
     navCategories[0];
 
   return (
-    <header className="sticky top-0 z-40 bg-mist/95 backdrop-blur-sm border-b border-mist-deep">
+    <header className="sticky top-0 z-40 bg-mist/90 backdrop-blur-md" data-print="hide">
       <div className="max-w-6xl mx-auto px-4 sm:px-8">
-        <div className="flex items-center justify-between h-16 sm:h-20">
+        <div className="flex items-center justify-between h-14 sm:h-16">
           <button
             onClick={() => setActiveTab('overview')}
-            className="flex items-center gap-3 text-left"
+            className="flex items-center gap-2.5 text-left"
           >
-            <RidgeMark className="w-9 h-6 sm:w-11 sm:h-8 text-ink shrink-0" />
-            <span className="font-display text-lead sm:text-title font-normal text-ink leading-none">
+            <RidgeMark className="w-8 h-5.5 text-ink shrink-0" />
+            <span className="text-lead font-semibold text-ink leading-none tracking-tight">
               เขาใหญ่
             </span>
-            <span className="hidden sm:block text-fine text-stone border-l border-mist-deep pl-3 leading-snug">
-              31 ต.ค. — 1 พ.ย. 2569
-              <br />
-              สองวันหนึ่งคืน
+            <span className="hidden sm:block text-fine text-stone leading-none pl-1">
+              31 ต.ค. – 1 พ.ย. 2569
             </span>
           </button>
 
-          <div className="flex items-center gap-3 sm:gap-6">
+          <div className="flex items-center gap-1 sm:gap-2">
             <button
               onClick={onOpenSyncModal}
               title={
@@ -114,7 +112,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   ? 'ข้อมูลซิงก์ขึ้นคลาวด์ เพื่อนเห็นการแก้ไขทันที'
                   : 'ข้อมูลเก็บในเครื่องนี้เท่านั้น กดเพื่อเปิดการซิงก์'
               }
-              className="flex items-center gap-2 text-fine text-stone hover:text-ink transition-colors"
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-ctl text-fine text-stone hover:text-ink hover:bg-surface transition-colors"
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full ${isFirebase ? 'bg-moss' : 'bg-brass'}`}
@@ -126,84 +124,77 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
 
             <button
-              onClick={() => setIsPickerOpen(true)}
-              className="text-fine text-ink border-b border-brass pb-0.5 hover:text-brass transition-colors font-medium"
-            >
-              {me ? me.nickname : 'คุณคือใคร'}
-            </button>
-
-            <button
               onClick={onShare}
-              className="hidden sm:inline text-fine text-stone hover:text-ink transition-colors"
+              className="hidden sm:inline px-2.5 py-1.5 rounded-ctl text-fine text-stone hover:text-ink hover:bg-surface transition-colors"
             >
               แชร์ทริป
             </button>
 
             <button
+              onClick={() => setIsPickerOpen(true)}
+              className="flex items-center gap-2 pl-1.5 pr-3 py-1 rounded-full bg-surface hover:bg-mist-deep/70 text-fine text-ink font-medium transition-colors"
+            >
+              <span
+                className="w-5 h-5 rounded-full grid place-items-center text-[10px] text-paper"
+                style={{ backgroundColor: me?.avatarColor ?? '#6f6a60' }}
+                aria-hidden="true"
+              >
+                {me ? initialOf(me.nickname) : '?'}
+              </span>
+              {me ? me.nickname : 'คุณคือใคร'}
+            </button>
+
+            <button
               onClick={onOpenSyncModal}
-              className="text-stone hover:text-ink transition-colors p-1"
+              className="text-stone hover:text-ink hover:bg-surface rounded-ctl transition-colors p-2"
               title="ตั้งค่าการซิงก์ข้อมูล"
+              aria-label="ตั้งค่าการซิงก์ข้อมูล"
             >
               <Settings2 className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Desktop Navigation: 4 clean logical groups with dividers */}
-        <nav className="hidden sm:flex items-center gap-4 overflow-x-auto no-scrollbar -mb-px pb-3">
-          {navCategories.map((cat, catIdx) => (
-            <div key={cat.id} className="flex items-center gap-1.5 shrink-0">
-              {catIdx > 0 && (
-                <span className="h-4 w-px bg-mist-deep mx-2 shrink-0" aria-hidden="true" />
-              )}
-              <div className="flex items-center gap-1">
-                {cat.items.map((item) => {
-                  const isActive = activeTab === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => setActiveTab(item.id)}
-                      aria-current={isActive ? 'page' : undefined}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 text-fine sm:text-body rounded-ctl whitespace-nowrap transition-colors ${
-                        isActive
-                          ? 'bg-ink text-paper font-medium shadow-sm'
-                          : 'text-stone hover:text-ink hover:bg-mist-deep/40'
+        {/* Desktop: four groups, told apart by space rather than rules */}
+        <nav className="hidden sm:flex items-center gap-7 overflow-x-auto no-scrollbar">
+          {navCategories.map((cat) => (
+            <div key={cat.id} className="flex items-center gap-5 shrink-0">
+              {cat.items.map((item) => {
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`relative py-3 text-body whitespace-nowrap transition-colors ${
+                      isActive ? 'text-ink font-medium' : 'text-stone hover:text-ink'
+                    }`}
+                  >
+                    {item.label}
+                    <span
+                      className={`absolute left-0 right-0 bottom-0 h-0.5 rounded-full transition-colors ${
+                        isActive ? 'bg-ink' : 'bg-transparent'
                       }`}
-                    >
-                      <span>{item.label}</span>
-                      {item.badge && (
-                        <span
-                          className={`text-[10px] px-1 py-0.2 rounded ${
-                            isActive
-                              ? 'bg-brass text-ink font-semibold'
-                              : 'bg-mist-deep/70 text-stone'
-                          }`}
-                        >
-                          {item.badge}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+                      aria-hidden="true"
+                    />
+                  </button>
+                );
+              })}
             </div>
           ))}
         </nav>
 
-        {/* Mobile Navigation: Category Selector + Focused Sub-tabs */}
-        <div className="sm:hidden pb-3 pt-1 space-y-2">
-          {/* Tier 1: Category Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar border-b border-mist-deep pb-2">
+        {/* Mobile: pick a group, then a page within it */}
+        <div className="sm:hidden pb-2.5 space-y-2">
+          <div className="flex items-center gap-1 p-0.5 bg-surface rounded-ctl">
             {navCategories.map((cat) => {
               const isCatActive = activeCategory.id === cat.id;
               return (
                 <button
                   key={cat.id}
                   onClick={() => setActiveTab(cat.items[0].id)}
-                  className={`text-fine px-2.5 py-1 rounded-full whitespace-nowrap transition-colors ${
-                    isCatActive
-                      ? 'bg-ink text-paper font-medium'
-                      : 'bg-paper text-stone border border-mist-deep hover:text-ink'
+                  className={`flex-1 text-fine py-1.5 rounded-[6px] whitespace-nowrap transition-colors ${
+                    isCatActive ? 'bg-paper text-ink font-medium' : 'text-stone'
                   }`}
                 >
                   {cat.label}
@@ -212,31 +203,35 @@ export const Navbar: React.FC<NavbarProps> = ({
             })}
           </div>
 
-          {/* Tier 2: Sub-tabs within Active Category */}
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-4 overflow-x-auto no-scrollbar px-1">
             {activeCategory.items.map((item) => {
               const isActive = activeTab === item.id;
               return (
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`text-fine px-3 py-1.5 rounded-ctl whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-                    isActive
-                      ? 'bg-brass text-ink font-medium shadow-sm'
-                      : 'bg-paper text-stone border border-mist-deep hover:text-ink'
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`relative py-1.5 text-body whitespace-nowrap transition-colors ${
+                    isActive ? 'text-ink font-medium' : 'text-stone'
                   }`}
                 >
-                  <span>{item.label}</span>
-                  {item.badge && <span>{item.badge}</span>}
+                  {item.label}
+                  <span
+                    className={`absolute left-0 right-0 bottom-0 h-0.5 rounded-full ${
+                      isActive ? 'bg-ink' : 'bg-transparent'
+                    }`}
+                    aria-hidden="true"
+                  />
                 </button>
               );
             })}
           </div>
         </div>
       </div>
+      <div className="h-px bg-mist-deep/70" aria-hidden="true" />
 
       {syncError && (
-        <p role="status" className="bg-ink text-mist text-fine px-5 sm:px-8 py-2.5">
+        <p role="status" className="bg-brass/15 text-ink text-fine px-5 sm:px-8 py-2.5">
           {syncError}
         </p>
       )}
@@ -276,7 +271,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   >
                     <span className="inline-flex items-center gap-2.5 text-body text-ink group-hover:text-brass transition-colors">
                       <span
-                        className="w-1.5 h-1.5"
+                        className="w-2 h-2 rounded-full"
                         style={{ backgroundColor: member.avatarColor }}
                         aria-hidden="true"
                       />

@@ -168,7 +168,7 @@ export const CarsTab: React.FC<CarsTabProps> = ({ trip, onSaveItem, onRemoveItem
           />
         </Panel>
       ) : (
-        <div className="bg-paper divide-y divide-mist-deep">
+        <div className="bg-paper rounded-panel overflow-hidden divide-y divide-mist-deep/70">
           {trip.cars.map((car, index) => {
             const isFull = car.passengerIds.length >= car.maxSeats;
             const availableCount = car.maxSeats - car.passengerIds.length;
@@ -237,7 +237,7 @@ export const CarsTab: React.FC<CarsTabProps> = ({ trip, onSaveItem, onRemoveItem
                     return (
                       <span key={pId} className="inline-flex items-center gap-1.5 text-fine text-ink">
                         <span
-                          className="w-1.5 h-1.5"
+                          className="w-1.5 h-1.5 rounded-full"
                           style={{ backgroundColor: member?.avatarColor || '#2f4a3c' }}
                           aria-hidden="true"
                         />
@@ -269,7 +269,7 @@ export const CarsTab: React.FC<CarsTabProps> = ({ trip, onSaveItem, onRemoveItem
                       ) : !isFull ? (
                         <button
                           onClick={() => handleAddPassengerToCar(car.id, me.id)}
-                          className="px-3.5 py-1.5 bg-brass hover:bg-brass-lit text-ink text-fine font-medium rounded-ctl transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
+                          className="px-3.5 py-1.5 bg-brass hover:bg-brass-lit text-ink text-fine font-medium rounded-ctl transition-colors flex items-center gap-1.5 cursor-pointer"
                         >
                           🚗 ขอนั่งคันนี้
                         </button>
@@ -338,7 +338,7 @@ export const CarsTab: React.FC<CarsTabProps> = ({ trip, onSaveItem, onRemoveItem
                     >
                       <span className="inline-flex items-center gap-2.5 text-body text-ink group-hover:text-brass transition-colors">
                         <span
-                          className="w-1.5 h-1.5"
+                          className="w-1.5 h-1.5 rounded-full"
                           style={{ backgroundColor: member.avatarColor }}
                           aria-hidden="true"
                         />

@@ -49,7 +49,7 @@ export const DayOfTab: React.FC<DayOfTabProps> = ({ trip, me, setActiveTab }) =>
           />
         </Panel>
       ) : (
-        <Panel className="mb-px">
+        <Panel className="mb-3">
           <h2 className="font-display text-lead text-ink border-b border-mist-deep pb-5">
             ของคุณ {me.nickname}
           </h2>
@@ -107,7 +107,7 @@ export const DayOfTab: React.FC<DayOfTabProps> = ({ trip, me, setActiveTab }) =>
       )}
 
       {/* Drivers — the numbers you actually dial when someone is late */}
-      <Panel className="mb-px">
+      <Panel className="mb-3">
         <h2 className="font-display text-lead text-ink border-b border-mist-deep pb-5">
           รถและคนขับ
         </h2>
@@ -149,7 +149,7 @@ export const DayOfTab: React.FC<DayOfTabProps> = ({ trip, me, setActiveTab }) =>
       </Panel>
 
       {stay && (
-        <Panel className="mb-px">
+        <Panel className="mb-3">
           <h2 className="font-display text-lead text-ink border-b border-mist-deep pb-5">
             ที่พัก
           </h2>
@@ -184,7 +184,7 @@ export const DayOfTab: React.FC<DayOfTabProps> = ({ trip, me, setActiveTab }) =>
           (a, b) => startMinutes(a.time) - startMinutes(b.time)
         );
         return (
-          <Panel key={day.dayNumber} className="mb-px">
+          <Panel key={day.dayNumber} className="mb-3">
             <h2 className="font-display text-lead text-ink border-b border-mist-deep pb-5">
               {day.dayLabel}
               <span className="ml-3 text-fine font-sans text-stone">{day.date}</span>

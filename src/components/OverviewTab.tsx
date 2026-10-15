@@ -1,7 +1,20 @@
 import React, { useState } from 'react';
-import { Plus, Send, ArrowRight, Trash2, CheckCircle2, Car, Home, MapPin, Share2, Sparkles } from 'lucide-react';
+import { Send, Trash2, Car, MapPinned, Link2, FileDown, MessageCircle } from 'lucide-react';
 import { TripData, Member, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
+import { calculateBalances } from '../services/settlement';
+import {
+  routeOfDay,
+  zoneOf,
+  zoneById,
+  driveMinutes,
+  formatMinutes,
+  googleMapsRouteUrl,
+  ZoneId,
+} from '../services/route';
+import { Modal, Field, Tag } from './ui';
+import { input, btnSolid, btnQuiet, btnLink, baht, initialOf } from './ui-kit';
+import { RouteMap } from './RouteMap';
 
 interface OverviewTabProps extends TripListEditor {
   trip: TripData;
@@ -9,7 +22,25 @@ interface OverviewTabProps extends TripListEditor {
   setActiveTab: (tab: string) => void;
   me: Member | null;
   onChooseMe: (who: string | Member | null) => void;
+  onShare: () => void;
+  onOpenSync: () => void;
+  isFirebase: boolean;
 }
+
+const AVATAR_COLORS = [
+  '#1b3b2b', '#a8782f', '#6f6a60', '#4c6a56', '#d4a85e',
+  '#2f5a45', '#8a6326', '#3e5c4c', '#b99561', '#5d6b60',
+];
+
+const DAY_MS = 1000 * 60 * 60 * 24;
+
+const thaiDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' });
+
+/** "Day 1: ออกเดินทาง & เช็คอิน" → "ออกเดินทาง & เช็คอิน" */
+const dayTitle = (label: string) => label.replace(/^Day\s*\d+\s*:\s*/i, '');
+
+const clockOf = (time: string) => time.split(/[–-]/)[0].trim();
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({
   trip,
@@ -18,9 +49,11 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   setActiveTab,
   me,
   onChooseMe,
+  onShare,
+  onOpenSync,
+  isFirebase,
 }) => {
   const [newAnnouncement, setNewAnnouncement] = useState('');
-  const [announcementAuthor, setAnnouncementAuthor] = useState(me?.nickname || '');
   const [showAnnounceForm, setShowAnnounceForm] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -33,12 +66,29 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   const [quickCarModel, setQuickCarModel] = useState('');
   const [showQuickRsvp, setShowQuickRsvp] = useState(false);
 
-  // Statistics
+  // ── Where the trip stands ─────────────────────────────────────
   const confirmedMembers = trip.members.filter((m) => m.status === 'confirmed');
-
+  const maybeCount = trip.members.filter((m) => m.status === 'maybe').length;
   const totalCarSeats = trip.cars.reduce((sum, car) => sum + car.maxSeats, 0);
+  const plannedStops = trip.itinerary.reduce((sum, d) => sum + d.activities.length, 0);
 
-  // Check personal status for the logged-in user
+  const today = new Date();
+  const start = new Date(trip.startDate);
+  const end = new Date(trip.endDate);
+  const daysLeft = Math.ceil((start.getTime() - today.getTime()) / DAY_MS);
+  const isOver = today.getTime() > end.getTime() + DAY_MS;
+  const countdown = isOver
+    ? 'ทริปจบแล้ว'
+    : daysLeft > 1
+    ? `อีก ${daysLeft} วันออกเดินทาง`
+    : daysLeft === 1
+    ? 'พรุ่งนี้ออกเดินทาง'
+    : daysLeft === 0
+    ? 'วันนี้ออกเดินทาง'
+    : 'อยู่ระหว่างทริป';
+  const yearBE = start.getFullYear() + 543;
+
+  // ── What it means for whoever is holding the phone ────────────
   const myCar = me
     ? trip.cars.find(
         (c) =>
@@ -47,21 +97,34 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           c.driverName.includes(me.name)
       )
     : undefined;
-
   const myRoom = me
     ? trip.confirmedAccommodation?.rooms.find((r) => r.guestIds.includes(me.id))
     : undefined;
+  const myBalance = me
+    ? calculateBalances(trip.expenses, trip.members, trip.payments ?? []).find(
+        (b) => b.memberId === me.id
+      )
+    : undefined;
+  const myNet = Math.round(myBalance?.net ?? 0);
 
-  // Countdown to the departure date
-  const calculateDaysLeft = () => {
-    const today = new Date();
-    const tripDate = new Date(trip.startDate);
-    const diffTime = tripDate.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
-  };
-
-  const daysLeft = calculateDaysLeft();
+  // ── Route ─────────────────────────────────────────────────────
+  // During the trip, open on the day it is; before it, on the first day.
+  const dayIndexToday = Math.floor((today.getTime() - start.getTime()) / DAY_MS);
+  const initialDay =
+    trip.itinerary.find((d) => d.dayNumber === dayIndexToday + 1)?.dayNumber ??
+    trip.itinerary[0]?.dayNumber ??
+    1;
+  const [selectedDay, setSelectedDay] = useState(initialDay);
+  const day = trip.itinerary.find((d) => d.dayNumber === selectedDay) ?? trip.itinerary[0];
+  const route = day ? routeOfDay(day) : null;
+  const stayZone = trip.confirmedAccommodation
+    ? zoneOf(trip.confirmedAccommodation.address, trip.confirmedAccommodation.name)
+    : null;
+  const stopCounts: Partial<Record<ZoneId, number>> = {};
+  route?.stops.forEach((s) => {
+    if (s.zone) stopCounts[s.zone] = (stopCounts[s.zone] ?? 0) + 1;
+  });
+  const mapsUrl = day ? googleMapsRouteUrl(day.activities) : null;
 
   const handleAddAnnouncement = (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,7 +136,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       id: `an-${Date.now()}`,
       text: newAnnouncement.trim(),
       date: new Date().toISOString().split('T')[0],
-      author: announcementAuthor.trim() || 'เพื่อนร่วมทริป',
+      author: me?.nickname || 'เพื่อนร่วมทริป',
     };
 
     onSaveItem('announcements', announcement);
@@ -91,17 +154,11 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     e.preventDefault();
     if (!quickNickname.trim()) return;
 
-    const colorPalette = [
-      '#2f4a3c', '#a88d4f', '#6e7a72', '#1b2e27', '#c7ac72',
-      '#4a6b57', '#8c7340', '#3d5a4a', '#b09a6a', '#55665c'
-    ];
-    const randomColor = colorPalette[trip.members.length % colorPalette.length];
-
     const newMember: Member = {
       id: `m-${Date.now()}`,
       name: quickName.trim() || quickNickname.trim(),
       nickname: quickNickname.trim(),
-      avatarColor: randomColor,
+      avatarColor: AVATAR_COLORS[trip.members.length % AVATAR_COLORS.length],
       status: quickStatus,
       role: trip.members.length === 0 ? 'organizer' : 'member',
       hasCarVolunteer: quickHasCar,
@@ -136,344 +193,392 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
     setShowQuickRsvp(false);
   };
 
-  const milestones = [
-    {
-      tab: 'members',
-      step: 'หนึ่ง',
-      title: 'รวมพลเพื่อน',
-      value: `${confirmedMembers.length}`,
-      unit: 'จาก 10–12 คน',
-      badge:
-        confirmedMembers.length >= 10
-          ? '🟢 ครบแก๊งแล้ว'
-          : `🟡 ขาดอีก ${Math.max(0, 10 - confirmedMembers.length)} คน`,
-      note: 'เป้าหมาย 10–12 คน',
-      isDone: confirmedMembers.length >= 10,
-    },
-    {
-      tab: 'cars',
-      step: 'สอง',
-      title: 'สำรวจรถ',
-      value: `${trip.cars.length}`,
-      unit: 'คัน',
-      badge:
-        trip.cars.length === 0
-          ? '🔴 ยังไม่มีรถ'
-          : totalCarSeats >= confirmedMembers.length
-          ? '🟢 ที่นั่งพอแล้ว'
-          : `🟡 ขาดอีก ${confirmedMembers.length - totalCarSeats} ที่`,
-      note: trip.cars.length === 0 ? 'ต้องการคนอาสาขับ' : `นั่งได้รวม ${totalCarSeats} คน`,
-      isDone: totalCarSeats >= confirmedMembers.length && trip.cars.length > 0,
-    },
-    {
-      tab: 'stay',
-      step: 'สาม',
-      title: 'โหวตที่พัก',
-      value: `${trip.accommodationOptions.length}`,
-      unit: 'ตัวเลือก',
-      badge: trip.confirmedAccommodation
-        ? '🟢 จองแล้ว'
-        : trip.accommodationOptions.length > 0
-        ? '🟡 กำลังโหวต'
-        : '🔴 ยังไม่มีตัวเลือก',
-      note: trip.confirmedAccommodation
-        ? trip.confirmedAccommodation.name
-        : 'พูลวิลล่า 4–5 ห้องนอน',
-      isDone: Boolean(trip.confirmedAccommodation),
-    },
-    {
-      tab: 'itinerary',
-      step: 'สี่',
-      title: 'ปักหมุดที่เที่ยว',
-      value: `${trip.placeIdeas.length}`,
-      unit: 'จุดแวะ',
-      badge:
-        trip.placeIdeas.length >= 3
-          ? `🟢 ปักแล้ว ${trip.placeIdeas.length} จุด`
-          : trip.placeIdeas.length > 0
-          ? `🟡 มี ${trip.placeIdeas.length} จุดแวะ`
-          : '🔴 ยังไม่มีจุดแวะ',
-      note: 'คาเฟ่และร้านอาหาร',
-      isDone: trip.placeIdeas.length >= 3,
-    },
-  ];
-
-  const nextSteps = [
-    {
-      tab: 'stay',
-      title: 'ที่พักพูลวิลล่า',
-      detail: trip.confirmedAccommodation
-        ? `จองเรียบร้อยแล้ว (${trip.confirmedAccommodation.name})`
-        : 'พูลวิลล่า 4–5 ห้องนอน รองรับ 10–12 คน',
-      badge: trip.confirmedAccommodation ? 'จองแล้ว' : 'รอสรุป',
-      badgeColor: trip.confirmedAccommodation
-        ? 'bg-moss/20 text-moss'
-        : 'bg-brass/20 text-brass',
-      action: trip.confirmedAccommodation ? 'ดูที่พัก' : 'เสนอที่พัก',
-    },
-    {
-      tab: 'cars',
-      title: 'รถเดินทางและที่นั่ง',
-      detail:
-        totalCarSeats >= confirmedMembers.length
-          ? `มี ${trip.cars.length} คัน นั่งได้รวม ${totalCarSeats} คน (พอดีกลุ่ม)`
-          : `ยังขาดที่นั่งอีก ${Math.max(0, confirmedMembers.length - totalCarSeats)} ที่`,
-      badge: totalCarSeats >= confirmedMembers.length ? 'ที่นั่งพอ' : 'ขาดรถ',
-      badgeColor:
-        totalCarSeats >= confirmedMembers.length
-          ? 'bg-moss/20 text-moss'
-          : 'bg-brass/20 text-brass',
-      action: 'จัดที่นั่ง',
-    },
-    {
-      tab: 'itinerary',
-      title: 'ปักหมุดคาเฟ่และร้านอาหาร',
-      detail:
-        trip.placeIdeas.length > 0
-          ? `เสนอแล้ว ${trip.placeIdeas.length} จุดแวะ เข้าไปช่วยโหวตได้เลย`
-          : 'ยังไม่มีจุดแวะระหว่างทาง ช่วยกันเสนอร้านที่อยากไป',
-      badge: trip.placeIdeas.length > 0 ? `${trip.placeIdeas.length} จุด` : 'ยังไม่มี',
-      badgeColor:
-        trip.placeIdeas.length > 0 ? 'bg-moss/20 text-moss' : 'bg-amber-100 text-amber-800',
-      action: 'ปักหมุด',
-    },
-    {
-      tab: 'food',
-      title: 'โหวตเมนูอาหารมื้อเย็น/เช้า',
-      detail:
-        trip.menuIdeas.length > 0
-          ? `มี ${trip.menuIdeas.length} เมนูที่เพื่อนเสนอไว้`
-          : 'เสนอเมนูมื้อเย็นและมื้อเช้า แล้วโหวตก่อนไปซื้อของ',
-      badge: trip.menuIdeas.length > 0 ? `${trip.menuIdeas.length} เมนู` : 'รอเสนอ',
-      badgeColor:
-        trip.menuIdeas.length > 0 ? 'bg-moss/20 text-moss' : 'bg-mist-deep/40 text-stone',
-      action: 'โหวตเมนู',
-    },
-  ];
-
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
+  const readiness = [
+    {
+      tab: 'members',
+      label: 'เพื่อนที่ไปแน่',
+      value: `${confirmedMembers.length} คน`,
+      done: confirmedMembers.length >= 10,
+      state:
+        confirmedMembers.length >= 10
+          ? 'ครบแก๊งแล้ว'
+          : `ยังขาดอีก ${10 - confirmedMembers.length} คน`,
+    },
+    {
+      tab: 'cars',
+      label: 'รถ',
+      value: `${trip.cars.length} คัน`,
+      done: trip.cars.length > 0 && totalCarSeats >= confirmedMembers.length,
+      state:
+        trip.cars.length === 0
+          ? 'ยังไม่มีใครอาสาขับ'
+          : totalCarSeats >= confirmedMembers.length
+          ? `นั่งได้ ${totalCarSeats} คน พอแล้ว`
+          : `ที่นั่งขาดอีก ${confirmedMembers.length - totalCarSeats} ที่`,
+    },
+    {
+      tab: 'stay',
+      label: 'ที่พัก',
+      value: trip.confirmedAccommodation
+        ? 'จองแล้ว'
+        : `${trip.accommodationOptions.length} ตัวเลือก`,
+      done: Boolean(trip.confirmedAccommodation),
+      state: trip.confirmedAccommodation
+        ? trip.confirmedAccommodation.name
+        : trip.accommodationOptions.length > 0
+        ? 'กำลังโหวตกันอยู่'
+        : 'ยังไม่มีใครเสนอ',
+    },
+    {
+      tab: 'itinerary',
+      label: 'จุดแวะในตาราง',
+      value: `${plannedStops} จุด`,
+      done: trip.itinerary.every((d) => d.activities.length >= 2),
+      state:
+        trip.placeIdeas.length > 0
+          ? `เพื่อนเสนอไว้อีก ${trip.placeIdeas.length} ที่`
+          : plannedStops === 0
+          ? 'ยังว่างทั้งทริป'
+          : 'เสนอที่เที่ยวเพิ่มได้',
+    },
+  ];
+
   return (
-    <div className="pb-16">
-      {/* ── Hero ─────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-ink">
+    <div className="pb-20 space-y-3">
+      {/* ── Hero: the trip, and where you stand in it ─────────── */}
+      <section className="relative overflow-hidden rounded-panel bg-ink text-paper">
         <img
           src={trip.coverImage}
           alt="ช้างป่าเดินข้ามถนนในเขาใหญ่ รถจอดรอให้ผ่าน"
-          className="absolute inset-0 w-full h-full object-cover opacity-60"
+          className="absolute inset-0 w-full h-full object-cover opacity-50"
         />
-        {/* Layered vignette scrim for contrast and legibility */}
-        <div className="absolute inset-0 bg-gradient-to-b from-ink/90 via-ink/40 to-ink/95" />
+        <div
+          className="absolute inset-0 bg-gradient-to-r from-ink via-ink/80 to-ink/20"
+          aria-hidden="true"
+        />
 
-        <div className="relative px-6 sm:px-10 pt-12 sm:pt-20 pb-6 sm:pb-8 min-h-[30rem] sm:min-h-[34rem] flex flex-col">
-          <p className="text-fine text-brass-lit flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 bg-brass rounded-full" />
-            {trip.destination}
-          </p>
+        <div className="relative grid md:grid-cols-[1fr_20rem] lg:grid-cols-[1fr_22rem] gap-8 px-5 sm:px-10 py-8 sm:py-12 min-h-[24rem]">
+          <div className="flex flex-col">
+            <p className="text-fine text-brass-lit">{trip.destination}</p>
+            <h1 className="mt-3 font-display text-title sm:text-display text-paper max-w-xl">
+              {trip.title}
+            </h1>
+            <p className="mt-3 text-lead text-mist/90">
+              {thaiDate(trip.startDate)} – {thaiDate(trip.endDate)} {yearBE}
+              <span className="text-brass-lit whitespace-nowrap"> {countdown}</span>
+            </p>
 
-          <h1 className="mt-3 font-display text-title sm:text-display font-normal text-paper max-w-2xl">
-            {trip.title}
-          </h1>
-
-          <p className="mt-4 text-body text-mist/85 max-w-lg leading-relaxed">{trip.tagline}</p>
-
-          {/* Countdown & Dynamic Action Panel */}
-          <div className="mt-auto pt-6 flex flex-wrap items-center justify-between gap-6 border-t border-paper/15 bg-ink-soft/70 backdrop-blur-md -mx-6 sm:-mx-10 px-6 sm:px-10 pb-5 pt-5 rounded-t-xl">
-            <div className="flex items-center gap-6 sm:gap-8">
-              <div>
-                <span className="font-display text-display sm:text-[3.75rem] leading-none text-brass-lit">
-                  {daysLeft > 0 ? daysLeft : 0}
-                </span>
-                <span className="ml-2.5 text-body text-mist/80">
-                  {daysLeft > 0 ? 'วันก่อนออกเดินทาง' : 'ถึงวันเดินทางแล้ว'}
-                </span>
-              </div>
-
-              <div className="hidden md:block border-l border-paper/20 pl-6">
-                <p className="text-fine text-paper font-medium">
-                  คอนเฟิร์มแล้ว {confirmedMembers.length} คน
-                </p>
-                <p className="text-fine text-mist/60 mt-0.5">
-                  ช่วงเย็นขับช้า ๆ ช้างป่าข้ามถนนบ่อย
-                </p>
-              </div>
+            <div className="mt-auto pt-10">
+              {confirmedMembers.length > 0 ? (
+                <button
+                  onClick={() => setActiveTab('members')}
+                  className="group flex items-center gap-3 text-left"
+                >
+                  <span className="flex -space-x-1.5" aria-hidden="true">
+                    {confirmedMembers.slice(0, 12).map((m) => (
+                      <span
+                        key={m.id}
+                        className="w-7 h-7 rounded-full grid place-items-center text-[11px] font-medium text-paper ring-2 ring-ink"
+                        style={{ backgroundColor: m.avatarColor }}
+                      >
+                        {initialOf(m.nickname)}
+                      </span>
+                    ))}
+                  </span>
+                  <span className="text-fine text-mist/80 group-hover:text-paper transition-colors">
+                    ไปแน่ {confirmedMembers.length} คน
+                    {maybeCount > 0 && ` ขอดูก่อนอีก ${maybeCount}`}
+                  </span>
+                </button>
+              ) : (
+                <p className="text-fine text-mist/70">ยังไม่มีใครลงชื่อ เป็นคนแรกได้เลย</p>
+              )}
             </div>
+          </div>
 
-            {/* Dynamic CTA: tailored for whether the user has joined or not */}
+          {/* Personal plan — the three things a friend opens the link to check */}
+          <div className="self-end bg-paper text-ink rounded-panel p-5">
             {me ? (
-              <div className="flex items-center gap-3.5 bg-ink/90 border border-paper/20 rounded-ctl px-4 py-2.5 shadow-lg">
+              <>
                 <div className="flex items-center gap-2.5">
                   <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    className="w-7 h-7 rounded-full grid place-items-center text-fine font-medium text-paper"
                     style={{ backgroundColor: me.avatarColor }}
                     aria-hidden="true"
-                  />
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-fine text-paper font-medium">คุณ{me.nickname}</span>
-                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-moss/40 text-mist">
-                        ร่วมทริปแล้ว
-                      </span>
-                    </div>
-                    <p className="text-fine text-mist/75 mt-0.5">
-                      {myCar ? `🚗 รถ: ${myCar.driverName}` : '⚠️ ยังไม่ได้เลือกที่นั่งรถ'}
-                    </p>
-                  </div>
+                  >
+                    {initialOf(me.nickname)}
+                  </span>
+                  <p className="text-body font-semibold">แผนของ{me.nickname}</p>
                 </div>
-                <button
-                  onClick={() => setActiveTab(myCar ? 'dayof' : 'cars')}
-                  className="ml-2 px-3.5 py-1.5 bg-brass hover:bg-brass-lit text-ink text-fine font-medium rounded-ctl transition-colors shrink-0 flex items-center gap-1.5 shadow"
-                >
-                  {myCar ? 'ดูวันเดินทาง' : 'เลือกรถ'}
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
+
+                <dl className="mt-4 divide-y divide-mist-deep/70">
+                  <div className="py-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <dt className="text-fine text-stone">รถ</dt>
+                      <dd className="text-body truncate">
+                        {myCar ? myCar.driverName : 'ยังไม่มีที่นั่ง'}
+                      </dd>
+                      {myCar && (
+                        <dd className="text-fine text-stone truncate">
+                          {myCar.departureTime} {myCar.meetingPoint}
+                        </dd>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('cars')}
+                      className={`${btnLink} shrink-0 mt-4`}
+                    >
+                      {myCar ? 'ดูรถ' : 'เลือกรถ'}
+                    </button>
+                  </div>
+
+                  <div className="py-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <dt className="text-fine text-stone">ห้องนอน</dt>
+                      <dd className="text-body truncate">
+                        {myRoom
+                          ? myRoom.roomName
+                          : trip.confirmedAccommodation
+                          ? 'ยังไม่ได้เลือกห้อง'
+                          : 'รอสรุปที่พัก'}
+                      </dd>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('stay')}
+                      className={`${btnLink} shrink-0 mt-4`}
+                    >
+                      {myRoom ? 'ดูห้อง' : trip.confirmedAccommodation ? 'เลือกห้อง' : 'ไปโหวต'}
+                    </button>
+                  </div>
+
+                  <div className="py-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <dt className="text-fine text-stone">ค่าใช้จ่าย</dt>
+                      <dd className={`text-body ${myNet < 0 ? 'text-brass font-medium' : ''}`}>
+                        {myNet < 0
+                          ? `ต้องโอนอีก ${baht(-myNet)}`
+                          : myNet > 0
+                          ? `เพื่อนต้องคืนคุณ ${baht(myNet)}`
+                          : 'ไม่มียอดค้าง'}
+                      </dd>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('expenses')}
+                      className={`${btnLink} shrink-0 mt-4`}
+                    >
+                      {myNet < 0 ? 'จ่ายเลย' : 'ดูยอด'}
+                    </button>
+                  </div>
+                </dl>
+              </>
             ) : (
-              <button
-                onClick={() => setShowQuickRsvp(true)}
-                className="px-6 py-3 bg-brass hover:bg-brass-lit text-ink text-body font-medium rounded-ctl transition-colors shadow-lg flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                ลงชื่อร่วมทริป
-              </button>
+              <>
+                <p className="text-body font-semibold">ไปด้วยกันไหม</p>
+                <p className="mt-1.5 text-fine text-stone">
+                  ลงชื่อแล้วตรงนี้จะบอกว่าคุณนั่งรถคันไหน นอนห้องไหน และต้องโอนเท่าไร
+                </p>
+                <button
+                  onClick={() => setShowQuickRsvp(true)}
+                  className={`${btnSolid} w-full mt-5`}
+                >
+                  ลงชื่อร่วมทริป
+                </button>
+              </>
             )}
           </div>
         </div>
-
-        {/* Milestones read as an interactive step tracker with status badges */}
-        <div className="relative grid grid-cols-2 lg:grid-cols-4 border-t border-paper/15 bg-ink-soft/85 backdrop-blur-sm">
-          {milestones.map((m, i) => (
-            <button
-              key={m.tab}
-              onClick={() => setActiveTab(m.tab)}
-              className={`group text-left px-5 sm:px-8 py-5 hover:bg-paper/10 transition-colors border-paper/15 cursor-pointer ${
-                i % 2 === 0 ? 'border-r' : ''
-              } lg:border-r lg:last:border-r-0 ${i < 2 ? 'border-b lg:border-b-0' : ''}`}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-fine text-brass-lit font-medium">ขั้นที่{m.step}</span>
-                <span className="text-[11px] px-2 py-0.5 rounded-full bg-paper/10 text-mist group-hover:bg-brass group-hover:text-ink transition-colors">
-                  {m.badge}
-                </span>
-              </div>
-              <p className="mt-1.5 text-body text-mist/90 group-hover:text-paper transition-colors font-medium flex items-center justify-between">
-                <span>{m.title}</span>
-                <ArrowRight className="w-3.5 h-3.5 text-brass-lit opacity-40 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-              </p>
-              <p className="mt-2 font-display text-lead sm:text-title text-paper leading-none">
-                {m.value}
-                <span className="ml-2 font-sans text-fine text-mist/60">{m.unit}</span>
-              </p>
-              <p className="mt-1.5 text-fine text-mist/55 group-hover:text-mist/75 transition-colors truncate">
-                {m.note}
-              </p>
-            </button>
-          ))}
-        </div>
       </section>
 
-      {/* ── Action checklist & Discussion Board ──────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-px bg-mist-deep mt-px">
-        {/* Next Steps / Checklist takes center stage */}
-        <section className="lg:col-span-6 bg-paper px-6 sm:px-8 py-8">
-          <div className="flex items-center justify-between border-b border-mist-deep pb-5">
+      {/* ── Readiness: four things that decide whether the trip happens ── */}
+      <section className="bg-surface rounded-panel grid grid-cols-2 md:grid-cols-4">
+        {readiness.map((item) => (
+          <button
+            key={item.tab}
+            onClick={() => setActiveTab(item.tab)}
+            className="text-left px-5 sm:px-6 py-5 rounded-panel hover:bg-mist-deep/40 transition-colors min-w-0"
+          >
+            <p className="text-fine text-stone">{item.label}</p>
+            <p className="mt-1 text-lead font-semibold text-ink">{item.value}</p>
+            <p className="mt-1.5 truncate">
+              <Tag tone={item.done ? 'go' : 'wait'}>{item.state}</Tag>
+            </p>
+          </button>
+        ))}
+      </section>
+
+      {/* ── Route: Khao Yai is wide; the order of a day is the plan ── */}
+      {route && day && (
+        <section className="bg-paper rounded-panel px-5 sm:px-8 py-7">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
-              <h2 className="font-display text-lead text-ink">สิ่งที่แก๊งต้องช่วยกันทำ</h2>
-              <p className="mt-1 text-fine text-stone">
-                ความคืบหน้าของทริป คลิกแต่ละข้อเพื่อเข้าไปจัดการ
+              <h2 className="font-display text-title text-ink">เส้นทาง</h2>
+              <p className="mt-1.5 text-fine text-stone max-w-lg">
+                คาเฟ่ถนนธนะรัชต์กับวังน้ำเขียวห่างกันราว{' '}
+                {formatMinutes(driveMinutes('thanarat', 'wangnamkhiao'))} เรียงจุดแวะที่อยู่โซนเดียวกันไว้ติดกัน
+                จะได้อยู่บนรถน้อยลง
               </p>
+            </div>
+
+            <div className="flex p-0.5 bg-surface rounded-ctl self-start sm:self-auto" role="tablist">
+              {trip.itinerary.map((d) => {
+                const isActive = d.dayNumber === selectedDay;
+                return (
+                  <button
+                    key={d.dayNumber}
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => setSelectedDay(d.dayNumber)}
+                    className={`px-4 py-1.5 rounded-[6px] text-fine transition-colors ${
+                      isActive ? 'bg-paper text-ink font-medium' : 'text-stone hover:text-ink'
+                    }`}
+                  >
+                    วันที่ {d.dayNumber}
+                    <span className="ml-1.5 text-stone font-normal">{d.date.replace(/\s*\d{4}$/, '')}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          <ol className="divide-y divide-mist-deep mt-2">
-            {nextSteps.map((step, i) => (
-              <li key={step.tab}>
-                <button
-                  onClick={() => setActiveTab(step.tab)}
-                  className="group w-full text-left py-4 flex items-start gap-4 hover:bg-mist/30 px-2 -mx-2 rounded transition-colors"
-                >
-                  <span className="font-display text-lead text-brass leading-none pt-1">
-                    {i + 1}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-body font-medium text-ink group-hover:text-brass transition-colors">
-                        {step.title}
-                      </span>
-                      <span className={`text-[11px] px-2 py-0.5 rounded-full ${step.badgeColor}`}>
-                        {step.badge}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-fine text-stone">{step.detail}</p>
-                  </div>
-                  <span className="shrink-0 flex items-center gap-1 text-fine text-brass pt-1">
-                    <span>{step.action}</span>
-                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ol>
-        </section>
+          <div className="mt-6 grid md:grid-cols-[1.35fr_1fr] gap-8 lg:gap-10">
+            <div className="bg-mist rounded-panel p-3 sm:p-5 md:self-start md:sticky md:top-32">
+              <RouteMap
+                path={route.zonePath}
+                stopCounts={stopCounts}
+                stayZone={stayZone}
+                pathKey={`day-${day.dayNumber}-${route.zonePath.join('-')}`}
+              />
+            </div>
 
-        {/* Board & Noticeboard */}
-        <section className="lg:col-span-6 bg-paper px-6 sm:px-8 py-8">
-          <div className="flex items-start justify-between gap-4 border-b border-mist-deep pb-5">
-            <div>
-              <h2 className="font-display text-lead text-ink">บอร์ดพูดคุย & ประกาศ</h2>
-              <p className="mt-1 text-fine text-stone">
-                แจ้งข่าว นัดหมาย หรือความคืบหน้า
-              </p>
+            <div className="flex flex-col min-w-0">
+              <h3 className="text-body font-semibold text-ink">{dayTitle(day.dayLabel)}</h3>
+
+              {route.stops.length === 0 ? (
+                <div className="mt-4 flex-1">
+                  <p className="text-body text-stone">
+                    วันนี้ยังว่าง ดึงที่เที่ยวที่เพื่อนเสนอไว้ลงตาราง แล้วเส้นทางจะขึ้นบนแผนผังนี้
+                  </p>
+                  <button onClick={() => setActiveTab('itinerary')} className={`${btnLink} mt-4`}>
+                    ไปจัดตารางเที่ยว
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <ol className="mt-4 flex-1">
+                    {route.stops.map((stop, i) => {
+                      const previousZone = route.stops
+                        .slice(0, i)
+                        .reverse()
+                        .find((s) => s.zone)?.zone;
+                      const showLeg =
+                        stop.legMinutes !== null && previousZone && previousZone !== stop.zone;
+                      return (
+                        <li key={stop.activity.id}>
+                          {showLeg && (
+                            <p className="flex items-center gap-2 py-1.5 pl-[3.75rem] text-fine text-stone">
+                              <Car className="w-3.5 h-3.5 text-brass" aria-hidden="true" />
+                              ขับ ≈ {formatMinutes(stop.legMinutes!)}
+                            </p>
+                          )}
+                          <div className="grid grid-cols-[3rem_1fr] gap-3 py-2">
+                            <span className="text-fine text-stone pt-0.5 tabular-nums">
+                              {clockOf(stop.activity.time)}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-body font-medium text-ink truncate">
+                                {stop.activity.title}
+                              </p>
+                              <p className="text-fine text-stone truncate">
+                                {stop.zone
+                                  ? zoneById(stop.zone).name
+                                  : stop.activity.location || 'ยังไม่ได้ใส่สถานที่'}
+                              </p>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+
+                  <div className="mt-5 pt-4 border-t border-mist-deep/70 space-y-2">
+                    <p className="text-body text-ink">
+                      ขับรวมราว <span className="font-semibold">{formatMinutes(route.driveMinutes)}</span>
+                    </p>
+                    {route.backtracks.length > 0 && (
+                      <p className="text-fine text-brass">
+                        วนกลับไป{route.backtracks.map((z) => zoneById(z).name).join(' และ ')}อีกรอบ
+                        ลองย้ายจุดแวะในโซนเดียวกันมาไว้ติดกัน
+                      </p>
+                    )}
+                    {route.unplaced > 0 && (
+                      <p className="text-fine text-stone">
+                        {route.unplaced} จุดยังไม่รู้ว่าอยู่โซนไหน ใส่ชื่อถนนหรืออำเภอในช่องสถานที่จะคำนวณได้
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {mapsUrl && (
+                  <a href={mapsUrl} target="_blank" rel="noreferrer" className={`${btnSolid} inline-flex items-center gap-2`}>
+                    <MapPinned className="w-4 h-4" aria-hidden="true" />
+                    เปิดใน Google Maps
+                  </a>
+                )}
+                <button onClick={() => setActiveTab('itinerary')} className={btnQuiet}>
+                  แก้ตาราง
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <button
-                onClick={handleCopyLink}
-                className="flex items-center gap-1.5 text-fine text-stone hover:text-ink transition-colors"
-                title="คัดลอกลิงก์ส่งเข้า LINE กลุ่ม"
-              >
-                <Share2 className="w-3.5 h-3.5" />
-                <span>{copiedLink ? 'คัดลอกแล้ว!' : 'แชร์เข้า LINE'}</span>
-              </button>
-              <button
-                onClick={() => setShowAnnounceForm(!showAnnounceForm)}
-                className="flex items-center gap-1 text-fine text-ink border-b border-brass pb-0.5 hover:text-brass transition-colors font-medium"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                โพสต์ข้อความ
-              </button>
-            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── Board and hand-off ─────────────────────────────────── */}
+      <div className="grid md:grid-cols-[1.35fr_1fr] gap-3">
+        <section className="bg-paper rounded-panel px-5 sm:px-8 py-7">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="font-display text-lead text-ink">ประกาศ</h2>
+            <button
+              onClick={() => setShowAnnounceForm(!showAnnounceForm)}
+              className={btnLink}
+              aria-expanded={showAnnounceForm}
+            >
+              {showAnnounceForm ? 'ปิด' : 'เขียนประกาศ'}
+            </button>
           </div>
 
           {showAnnounceForm && (
-            <form onSubmit={handleAddAnnouncement} className="mt-5 space-y-3">
+            <form onSubmit={handleAddAnnouncement} className="mt-4 space-y-3">
+              <label htmlFor="announce-text" className="sr-only">
+                ข้อความประกาศ
+              </label>
               <textarea
+                id="announce-text"
                 value={newAnnouncement}
                 onChange={(e) => setNewAnnouncement(e.target.value)}
-                placeholder="พิมพ์ข้อความถึงเพื่อน ๆ เช่น ใครมีพูลวิลล่าแนะนำ แปะไว้ในแถบที่พักได้เลย"
+                placeholder="นัดเจอปั๊ม ปตท. วังน้อย 07:30 ใครมาช้าโทรบอกด้วย"
                 rows={3}
-                className="w-full text-body p-3 rounded-ctl border border-mist-deep bg-mist/40 focus:outline-none focus:border-brass"
+                autoFocus
+                className={input}
               />
               <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-fine text-stone">ผู้โพสต์:</span>
-                  <input
-                    type="text"
-                    value={announcementAuthor}
-                    onChange={(e) => setAnnouncementAuthor(e.target.value)}
-                    placeholder="ชื่อผู้โพสต์"
-                    className="text-fine py-1.5 px-3 bg-mist/60 border border-mist-deep rounded-ctl w-36 focus:outline-none focus:border-brass text-ink font-medium"
-                  />
-                </div>
+                <span className="text-fine text-stone">
+                  โพสต์ในชื่อ {me?.nickname ?? 'เพื่อนร่วมทริป'}
+                </span>
                 <button
                   type="submit"
                   disabled={!newAnnouncement.trim()}
-                  className="flex items-center gap-2 px-5 py-2 text-fine text-paper bg-ink hover:bg-moss disabled:opacity-40 rounded-ctl transition-colors cursor-pointer"
+                  className={`${btnSolid} inline-flex items-center gap-2`}
                 >
-                  <Send className="w-3.5 h-3.5" />
+                  <Send className="w-3.5 h-3.5" aria-hidden="true" />
                   โพสต์
                 </button>
               </div>
@@ -481,22 +586,22 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           )}
 
           {trip.announcements.length === 0 ? (
-            <p className="mt-8 text-body text-stone">
-              ยังไม่มีใครโพสต์ เริ่มจากบอกเพื่อน ๆ ว่าอยากไปไหนก่อนก็ได้
+            <p className="mt-6 text-body text-stone">
+              ยังไม่มีประกาศ เขียนเรื่องที่ทุกคนต้องรู้ เช่น เวลานัดหรือของที่ต้องเอาไป
             </p>
           ) : (
-            <ul className="mt-6 divide-y divide-mist-deep">
-              {trip.announcements.map((item) => (
-                <li key={item.id} className="py-5 first:pt-0 flex items-start gap-4">
+            <ul className="mt-4 divide-y divide-mist-deep/70">
+              {[...trip.announcements].sort((a, b) => b.date.localeCompare(a.date)).map((item) => (
+                <li key={item.id} className="py-4 flex items-start gap-4 group">
                   <div className="flex-1 min-w-0">
                     <p className="text-body text-ink">{item.text}</p>
-                    <p className="mt-2 text-fine text-stone">
-                      {item.author} · {item.date}
+                    <p className="mt-1 text-fine text-stone">
+                      {item.author}, {new Date(item.date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}
                     </p>
                   </div>
                   <button
                     onClick={() => handleDeleteAnnouncement(item.id)}
-                    className="text-stone hover:text-ink transition-colors shrink-0"
+                    className="text-stone/60 hover:text-ink transition-colors shrink-0 p-1"
                     aria-label={`ลบข้อความของ ${item.author}`}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -507,156 +612,160 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
           )}
         </section>
 
-        <section className="bg-paper px-6 sm:px-8 py-8">
-          <h2 className="font-display text-lead text-ink border-b border-mist-deep pb-5">
-            สิ่งที่ต้องทำต่อไป
-          </h2>
+        <section className="bg-surface rounded-panel px-5 sm:px-8 py-7" data-print="hide">
+          <h2 className="font-display text-lead text-ink">ส่งแผนให้เพื่อน</h2>
 
-          <ol className="divide-y divide-mist-deep">
-            {nextSteps.map((step, i) => (
-              <li key={step.tab}>
+          <ul className="mt-4 -mx-2">
+            {[
+              {
+                icon: MessageCircle,
+                label: 'ส่งสรุปเข้า LINE',
+                note: 'ข้อความสรุปรถ ที่พัก ตาราง พร้อมวาง',
+                onClick: onShare,
+              },
+              {
+                icon: Link2,
+                label: copiedLink ? 'คัดลอกลิงก์แล้ว' : 'คัดลอกลิงก์ทริป',
+                note: 'เพื่อนเปิดได้ทันที ไม่ต้องสมัครอะไร',
+                onClick: handleCopyLink,
+              },
+              {
+                icon: FileDown,
+                label: 'บันทึกเป็น PDF',
+                note: 'เก็บหน้านี้ไว้ดูตอนไม่มีเน็ต',
+                onClick: () => window.print(),
+              },
+            ].map(({ icon: Icon, label, note, onClick }) => (
+              <li key={note}>
                 <button
-                  onClick={() => setActiveTab(step.tab)}
-                  className="group w-full text-left py-5 flex items-start gap-4"
+                  onClick={onClick}
+                  className="w-full flex items-start gap-3 px-2 py-3 rounded-ctl text-left hover:bg-mist-deep/40 transition-colors"
                 >
-                  <span className="font-display text-lead text-brass leading-none pt-0.5">
-                    {i + 1}
+                  <Icon className="w-4 h-4 mt-0.5 text-ink shrink-0" aria-hidden="true" />
+                  <span>
+                    <span className="block text-body text-ink">{label}</span>
+                    <span className="block text-fine text-stone">{note}</span>
                   </span>
-                  <span className="flex-1">
-                    <span className="block text-body text-ink group-hover:text-brass transition-colors">
-                      {step.title}
-                    </span>
-                    <span className="block mt-1 text-fine text-stone">{step.detail}</span>
-                  </span>
-                  <ArrowRight className="w-4 h-4 mt-1 text-mist-deep group-hover:text-brass transition-colors" />
                 </button>
               </li>
             ))}
-          </ol>
+          </ul>
+
+          <div className="mt-4 pt-4 border-t border-mist-deep">
+            <p className="flex items-center gap-2 text-fine text-ink">
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${isFirebase ? 'bg-moss' : 'bg-brass'}`}
+                aria-hidden="true"
+              />
+              {isFirebase ? 'ซิงก์กับคลาวด์อยู่ เพื่อนเห็นการแก้ไขทันที' : 'บันทึกไว้ในเครื่องนี้'}
+            </p>
+            <p className="mt-1 text-fine text-stone">
+              {isFirebase
+                ? 'แก้จากเครื่องไหนก็ได้ ทุกคนเห็นแผนเดียวกัน'
+                : 'ใช้ได้เลยโดยไม่ต้องสมัคร เปิดซิงก์เมื่ออยากให้เพื่อนแก้แผนเดียวกัน'}
+            </p>
+            <button onClick={onOpenSync} className={`${btnLink} mt-3`}>
+              {isFirebase ? 'ตั้งค่าการซิงก์' : 'เปิดการซิงก์'}
+            </button>
+          </div>
         </section>
       </div>
 
       {/* ── Quick RSVP ───────────────────────────────────────── */}
       {showQuickRsvp && (
-        <div className="fixed inset-0 z-50 bg-ink/70 flex items-center justify-center p-4">
-          <div className="bg-paper rounded-ctl max-w-md w-full px-6 sm:px-8 py-8 max-h-[90vh] overflow-y-auto">
-            <h2 className="font-display text-lead text-ink">ลงชื่อร่วมทริป</h2>
-            <p className="mt-1 text-fine text-stone">
-              31 ต.ค. — 1 พ.ย. 2569 เสาร์ถึงอาทิตย์ สองวันหนึ่งคืน
-            </p>
+        <Modal
+          title="ลงชื่อร่วมทริป"
+          note={`${thaiDate(trip.startDate)} – ${thaiDate(trip.endDate)} ${yearBE}`}
+          onClose={() => setShowQuickRsvp(false)}
+        >
+          <form onSubmit={handleQuickRsvp} className="space-y-5">
+            <Field label="ชื่อเล่น" htmlFor="rsvp-nickname">
+              <input
+                id="rsvp-nickname"
+                type="text"
+                required
+                autoFocus
+                value={quickNickname}
+                onChange={(e) => setQuickNickname(e.target.value)}
+                placeholder="นัท แบงค์ โอม"
+                className={input}
+              />
+            </Field>
 
-            <form onSubmit={handleQuickRsvp} className="mt-6 space-y-5 text-body">
-              <div>
-                <label htmlFor="rsvp-nickname" className="block text-fine text-stone mb-1.5">
-                  ชื่อเล่น
-                </label>
+            <Field label="ชื่อจริง ถ้าอยากใส่" htmlFor="rsvp-name">
+              <input
+                id="rsvp-name"
+                type="text"
+                value={quickName}
+                onChange={(e) => setQuickName(e.target.value)}
+                placeholder="ณัฐชา"
+                className={input}
+              />
+            </Field>
+
+            <Field label="ไปไหม" htmlFor="rsvp-status">
+              <select
+                id="rsvp-status"
+                value={quickStatus}
+                onChange={(e) => setQuickStatus(e.target.value as Member['status'])}
+                className={input}
+              >
+                <option value="confirmed">ไปแน่นอน</option>
+                <option value="maybe">ขอดูก่อน</option>
+                <option value="declined">ติดธุระ ไปไม่ได้</option>
+              </select>
+            </Field>
+
+            <div className="space-y-3">
+              <label htmlFor="hasCar" className="flex items-center gap-2.5 text-body text-ink cursor-pointer">
                 <input
-                  id="rsvp-nickname"
-                  type="text"
-                  required
-                  value={quickNickname}
-                  onChange={(e) => setQuickNickname(e.target.value)}
-                  placeholder="นัท แบงค์ โอม"
-                  className="w-full p-2.5 rounded-ctl border border-mist-deep bg-mist/40 focus:outline-none focus:border-brass"
+                  type="checkbox"
+                  id="hasCar"
+                  checked={quickHasCar}
+                  onChange={(e) => setQuickHasCar(e.target.checked)}
+                  className="w-4 h-4 accent-ink"
                 />
-              </div>
+                เอารถไปได้ อาสาเป็นคนขับ
+              </label>
 
-              <div>
-                <label htmlFor="rsvp-name" className="block text-fine text-stone mb-1.5">
-                  ชื่อจริง ถ้าอยากใส่
-                </label>
-                <input
-                  id="rsvp-name"
-                  type="text"
-                  value={quickName}
-                  onChange={(e) => setQuickName(e.target.value)}
-                  placeholder="ณัฐชา"
-                  className="w-full p-2.5 rounded-ctl border border-mist-deep bg-mist/40 focus:outline-none focus:border-brass"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="rsvp-status" className="block text-fine text-stone mb-1.5">
-                  ไปไหม
-                </label>
-                <select
-                  id="rsvp-status"
-                  value={quickStatus}
-                  onChange={(e) => setQuickStatus(e.target.value as Member['status'])}
-                  className="w-full p-2.5 rounded-ctl border border-mist-deep bg-mist/40 focus:outline-none focus:border-brass"
-                >
-                  <option value="confirmed">ไปแน่นอน</option>
-                  <option value="maybe">ขอดูก่อน</option>
-                  <option value="declined">ติดธุระ ไปไม่ได้</option>
-                </select>
-              </div>
-
-              <div className="border-t border-mist-deep pt-5 space-y-3">
-                <div className="flex items-center gap-2.5">
-                  <input
-                    type="checkbox"
-                    id="hasCar"
-                    checked={quickHasCar}
-                    onChange={(e) => setQuickHasCar(e.target.checked)}
-                    className="w-4 h-4 accent-brass"
-                  />
-                  <label htmlFor="hasCar" className="text-body text-ink cursor-pointer">
-                    เอารถไปได้ อาสาเป็นคนขับ
-                  </label>
+              {quickHasCar && (
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="รุ่นรถ" htmlFor="rsvp-car">
+                    <input
+                      id="rsvp-car"
+                      type="text"
+                      required={quickHasCar}
+                      value={quickCarModel}
+                      onChange={(e) => setQuickCarModel(e.target.value)}
+                      placeholder="CR-V, Civic, Yaris"
+                      className={input}
+                    />
+                  </Field>
+                  <Field label="นั่งได้กี่คน" htmlFor="rsvp-seats">
+                    <input
+                      id="rsvp-seats"
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={quickCarSeats}
+                      onChange={(e) => setQuickCarSeats(Number(e.target.value))}
+                      className={input}
+                    />
+                  </Field>
                 </div>
+              )}
+            </div>
 
-                {quickHasCar && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label htmlFor="rsvp-car" className="block text-fine text-stone mb-1.5">
-                        รุ่นรถ
-                      </label>
-                      <input
-                        id="rsvp-car"
-                        type="text"
-                        required={quickHasCar}
-                        value={quickCarModel}
-                        onChange={(e) => setQuickCarModel(e.target.value)}
-                        placeholder="CR-V, Civic, Yaris"
-                        className="w-full p-2.5 text-fine rounded-ctl border border-mist-deep bg-mist/40 focus:outline-none focus:border-brass"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="rsvp-seats" className="block text-fine text-stone mb-1.5">
-                        นั่งได้กี่คน
-                      </label>
-                      <input
-                        id="rsvp-seats"
-                        type="number"
-                        min={1}
-                        max={10}
-                        value={quickCarSeats}
-                        onChange={(e) => setQuickCarSeats(Number(e.target.value))}
-                        className="w-full p-2.5 text-fine rounded-ctl border border-mist-deep bg-mist/40 focus:outline-none focus:border-brass"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setShowQuickRsvp(false)}
-                  className="flex-1 py-2.5 text-body text-stone border border-mist-deep hover:text-ink rounded-ctl transition-colors"
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 text-body text-paper bg-ink hover:bg-moss rounded-ctl transition-colors"
-                >
-                  ลงชื่อ
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            <div className="flex gap-3 pt-1">
+              <button type="button" onClick={() => setShowQuickRsvp(false)} className={`flex-1 ${btnQuiet}`}>
+                ยกเลิก
+              </button>
+              <button type="submit" className={`flex-1 ${btnSolid}`}>
+                ลงชื่อ
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );
