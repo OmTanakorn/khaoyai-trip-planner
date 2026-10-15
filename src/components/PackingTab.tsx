@@ -98,60 +98,66 @@ export const PackingTab: React.FC<PackingTabProps> = ({ trip, onSaveItem, onRemo
       />
 
       <Panel className="mb-3">
-        <form onSubmit={handleAddItem} className="flex flex-col lg:flex-row gap-3">
+        <form
+          onSubmit={handleAddItem}
+          className="grid grid-cols-[1fr_auto] gap-2 lg:grid-cols-[1fr_12rem_12rem_auto] lg:gap-3"
+        >
           <input
             type="text"
             required
             value={newItemTitle}
             onChange={(e) => setNewItemTitle(e.target.value)}
             placeholder="น้ำจิ้มสุกี้ ลำโพงบลูทูธ ไดร์เป่าผม"
-            className={`${input} flex-1`}
+            className={`${input} min-w-0`}
             aria-label="ของที่ต้องเตรียม"
           />
 
-          <select
-            value={newItemCategory}
-            onChange={(e) => setNewItemCategory(e.target.value as 'shared' | 'personal')}
-            className={`${input} lg:w-48`}
-            aria-label="ประเภทของ"
-          >
-            <option value="shared">ของกองกลาง</option>
-            <option value="personal">ของส่วนตัว</option>
-          </select>
-
-          {newItemCategory === 'shared' && (
-            <select
-              value={newItemAssignedTo}
-              onChange={(e) => setNewItemAssignedTo(e.target.value)}
-              className={`${input} lg:w-48`}
-              aria-label="คนที่รับไปเตรียม"
-            >
-              <option value="">ยังไม่มีคนรับ</option>
-              {trip.members.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.nickname}
-                </option>
-              ))}
-            </select>
-          )}
-
-          <button type="submit" className={`${btnSolid} shrink-0`}>
+          <button type="submit" className={`${btnSolid} shrink-0 lg:order-last`}>
             <span className="inline-flex items-center gap-1.5">
               <Plus className="w-4 h-4" />
               เพิ่ม
             </span>
           </button>
+
+          {/* Second row on a phone; on a wide screen these sit in the first */}
+          <div className="col-span-2 grid grid-cols-2 gap-2 lg:contents">
+            <select
+              value={newItemCategory}
+              onChange={(e) => setNewItemCategory(e.target.value as 'shared' | 'personal')}
+              className={input}
+              aria-label="ประเภทของ"
+            >
+              <option value="shared">ของกองกลาง</option>
+              <option value="personal">ของส่วนตัว</option>
+            </select>
+
+            {newItemCategory === 'shared' && (
+              <select
+                value={newItemAssignedTo}
+                onChange={(e) => setNewItemAssignedTo(e.target.value)}
+                className={input}
+                aria-label="คนที่รับไปเตรียม"
+              >
+                <option value="">ยังไม่มีคนรับ</option>
+                {trip.members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.nickname}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
         </form>
       </Panel>
 
       <div className="bg-paper rounded-panel overflow-hidden">
-        <div className="flex gap-6 px-6 sm:px-8 border-b border-mist-deep">
+        <div className="flex gap-6 px-5 sm:px-8 border-b border-mist-deep overflow-x-auto no-scrollbar">
           {filters.map((f) => (
             <button
               key={f.id}
               onClick={() => setActiveFilter(f.id)}
               aria-pressed={activeFilter === f.id}
-              className={`py-4 text-fine border-b-2 -mb-px transition-colors ${
+              className={`py-4 text-fine whitespace-nowrap shrink-0 border-b-2 -mb-px transition-colors ${
                 activeFilter === f.id
                   ? 'border-brass text-ink'
                   : 'border-transparent text-stone hover:text-ink'
@@ -172,79 +178,87 @@ export const PackingTab: React.FC<PackingTabProps> = ({ trip, onSaveItem, onRemo
             }
           />
         ) : (
-          <ul className="divide-y divide-mist-deep">
-            {filteredItems.map((item) => (
-              <li
-                key={item.id}
-                className="px-6 sm:px-8 py-4 flex items-center gap-4"
-              >
-                <button
-                  onClick={() => handleTogglePacked(item.id)}
-                  aria-pressed={item.isPacked}
-                  aria-label={`ทำเครื่องหมายว่าเตรียม ${item.title} แล้ว`}
-                  className={`w-5 h-5 shrink-0 rounded-ctl border flex items-center justify-center transition-colors ${
-                    item.isPacked
-                      ? 'bg-ink border-ink text-paper'
-                      : 'border-mist-deep hover:border-brass'
-                  }`}
-                >
-                  {item.isPacked && <Check className="w-3 h-3" />}
-                </button>
-
-                <div className="flex-1 min-w-0">
-                  <p
-                    className={`text-body ${
-                      item.isPacked ? 'line-through text-stone' : 'text-ink'
-                    }`}
+          <ul className="divide-y divide-mist-deep/70">
+            {filteredItems.map((item) => {
+              const holder = trip.members.find((m) => m.id === item.assignedMemberId);
+              const isMine = !!me && item.assignedMemberId === me.id;
+              const forDish = menuTitleOf(item.fromMenuId);
+              return (
+                <li key={item.id} className="px-4 sm:px-8 py-4 flex items-start gap-3 sm:gap-4">
+                  {/* The hit area is bigger than the box, for thumbs */}
+                  <button
+                    onClick={() => handleTogglePacked(item.id)}
+                    aria-pressed={item.isPacked}
+                    aria-label={`ทำเครื่องหมายว่าเตรียม ${item.title} แล้ว`}
+                    className="p-1.5 -m-1.5 mt-0 shrink-0 group"
                   >
-                    {item.title}
-                  </p>
-                  <p className="text-fine text-stone truncate">
-                    {item.category === 'shared' ? 'ของกองกลาง' : 'ของส่วนตัว'}
-                    {menuTitleOf(item.fromMenuId) && ` · สำหรับ ${menuTitleOf(item.fromMenuId)}`}
-                  </p>
-                </div>
-
-                {item.category === 'shared' && (
-                  <div className="flex items-center gap-2">
-                    {me && !item.assignedMemberId && (
-                      <button
-                        onClick={() => handleAssignMember(item.id, me.id)}
-                        className="px-2.5 py-1 bg-brass hover:bg-brass-lit text-ink text-fine font-medium rounded-ctl transition-colors whitespace-nowrap cursor-pointer"
-                      >
-                        + ฉันเตรียมเอง
-                      </button>
-                    )}
-                    {me && item.assignedMemberId === me.id && (
-                      <span className="text-[12px] px-2 py-0.5 rounded bg-moss/20 text-moss font-medium whitespace-nowrap">
-                        คุณเตรียม
-                      </span>
-                    )}
-                    <select
-                      value={item.assignedMemberId || ''}
-                      onChange={(e) => handleAssignMember(item.id, e.target.value)}
-                      aria-label={`คนที่เตรียม ${item.title}`}
-                      className="text-fine py-1.5 px-2 rounded-ctl border border-mist-deep bg-mist/40 text-ink focus:outline-none focus:border-brass"
+                    <span
+                      className={`w-5 h-5 rounded-[6px] border-[1.5px] flex items-center justify-center transition-colors ${
+                        item.isPacked
+                          ? 'bg-ink border-ink text-paper'
+                          : 'border-stone/50 group-hover:border-ink'
+                      }`}
                     >
-                      <option value="">ยังไม่มีคนรับ</option>
-                      {trip.members.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.nickname} {me && m.id === me.id ? '(คุณ)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                      {item.isPacked && <Check className="w-3 h-3" />}
+                    </span>
+                  </button>
 
-                <button
-                  onClick={() => handleDeleteItem(item.id)}
-                  className="text-stone hover:text-ink transition-colors shrink-0"
-                  aria-label={`ลบ ${item.title}`}
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </li>
-            ))}
+                  <div className="flex-1 min-w-0 sm:flex sm:items-center sm:justify-between sm:gap-6">
+                    <div className="min-w-0">
+                      <p
+                        className={`text-body break-words ${
+                          item.isPacked ? 'line-through text-stone' : 'text-ink'
+                        }`}
+                      >
+                        {item.title}
+                      </p>
+                      <p className="mt-0.5 text-fine text-stone">
+                        {item.category === 'personal'
+                          ? 'ของส่วนตัว ทุกคนเตรียมเอง'
+                          : holder
+                          ? `${isMine ? 'คุณ' : holder.nickname}เตรียม`
+                          : 'ของกองกลาง ยังไม่มีคนรับ'}
+                        {forDish && `, สำหรับ${forDish}`}
+                      </p>
+                    </div>
+
+                    {item.category === 'shared' && (
+                      <div className="mt-2.5 sm:mt-0 flex items-center gap-3 shrink-0">
+                        {me && !item.assignedMemberId && (
+                          <button
+                            onClick={() => handleAssignMember(item.id, me.id)}
+                            className="px-3 py-1.5 rounded-ctl bg-ink text-paper text-fine font-medium hover:bg-ink-soft transition-colors whitespace-nowrap"
+                          >
+                            ฉันรับเอง
+                          </button>
+                        )}
+                        <select
+                          value={item.assignedMemberId || ''}
+                          onChange={(e) => handleAssignMember(item.id, e.target.value)}
+                          aria-label={`คนที่เตรียม ${item.title}`}
+                          className="text-fine py-1.5 pl-2.5 pr-7 rounded-ctl bg-surface text-ink focus:outline-none focus:ring-1 focus:ring-ink/40 max-w-[11rem]"
+                        >
+                          <option value="">{item.assignedMemberId ? 'ไม่มีคนรับ' : 'ให้คนอื่นรับ'}</option>
+                          {trip.members.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.nickname} {me && m.id === me.id ? '(คุณ)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => handleDeleteItem(item.id)}
+                    className="p-1.5 -m-1.5 text-stone/60 hover:text-ink transition-colors shrink-0"
+                    aria-label={`ลบ ${item.title}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

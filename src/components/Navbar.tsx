@@ -77,7 +77,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       items: [
         { id: 'expenses', label: 'งบและหารเงิน' },
         { id: 'packing', label: 'ของเตรียม' },
-        { id: 'board', label: 'บอร์ดรวม' },
       ],
     },
   ];

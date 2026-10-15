@@ -9,7 +9,6 @@ import { ExpensesTab } from './components/ExpensesTab';
 import { PackingTab } from './components/PackingTab';
 import { MembersTab } from './components/MembersTab';
 import { DayOfTab } from './components/DayOfTab';
-import { BoardTab } from './components/BoardTab';
 import { SyncModal } from './components/SyncModal';
 import { ShareModal } from './components/ShareModal';
 import { TripSecretary } from './components/TripSecretary';
@@ -288,10 +287,6 @@ export function App() {
 
         {activeTab === 'dayof' && (
           <DayOfTab trip={trip} me={me} setActiveTab={setActiveTab} />
-        )}
-
-        {activeTab === 'board' && (
-          <BoardTab trip={trip} onUpdateTrip={handleUpdateTrip} />
         )}
 
         {activeTab === 'members' && (

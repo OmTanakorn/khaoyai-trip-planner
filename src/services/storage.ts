@@ -393,7 +393,6 @@ const SCALAR_FIELDS = [
   'statusPhase',
   'coverImage',
   'confirmedAccommodation',
-  'boardUrl',
 ] as const;
 
 function scalarsOf(trip: Partial<TripData>): Record<string, unknown> {
