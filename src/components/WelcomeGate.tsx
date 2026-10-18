@@ -61,12 +61,22 @@ export const WelcomeGate: React.FC<WelcomeGateProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-mist flex items-center justify-center px-5 py-12">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-mist flex items-center justify-center px-5 py-12 relative overflow-hidden">
+      {trip.coverImage && (
+        <div className="absolute inset-0 z-0 opacity-15 pointer-events-none select-none">
+          <img
+            src={trip.coverImage}
+            alt=""
+            className="w-full h-full object-cover filter blur-[1px]"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-mist/60 via-mist/85 to-mist" />
+        </div>
+      )}
+      <div className="w-full max-w-md relative z-10">
         <p className="text-fine text-stone">{trip.destination}</p>
         <h1 className="mt-3 font-display text-title text-ink">{trip.title}</h1>
 
-        <form onSubmit={handleSubmit} className="mt-10 bg-paper rounded-panel px-6 sm:px-8 py-8">
+        <form onSubmit={handleSubmit} className="mt-8 bg-paper rounded-panel px-6 sm:px-8 py-8 shadow-sm border border-mist-deep/40">
           <h2 className="font-display text-lead text-ink">คุณคือใคร</h2>
           <p className="mt-2 text-fine text-stone">
             ใส่ชื่อเล่นไว้ครั้งเดียว เครื่องนี้จะจำให้ตลอด

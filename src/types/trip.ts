@@ -53,11 +53,22 @@ export interface AccommodationOption {
 export interface Room {
   id: string;
   roomName: string;
+  subName?: string;
   bedType: string;
   capacity: number;
   guestIds: string[];
   hasBathroom: boolean;
   notes?: string;
+  photoUrl?: string;
+  highlights?: string[];
+}
+
+export interface NearbyPlace {
+  name: string;
+  category: string;
+  distance: string;
+  driveTime: string;
+  mapUrl?: string;
 }
 
 export interface Accommodation {
@@ -72,6 +83,15 @@ export interface Accommodation {
   wifiSsid?: string;
   wifiPassword?: string;
   rooms: Room[];
+  airbnbUrl?: string;
+  heroImage?: string;
+  galleryImages?: string[];
+  japaneseSubtitle?: string;
+  areaSize?: string;
+  maxGuests?: number;
+  freePerks?: string[];
+  houseRules?: string[];
+  nearbyPlaces?: NearbyPlace[];
 }
 
 export interface PlaceIdea {
@@ -115,14 +135,25 @@ export interface MenuIdea {
   notes?: string;
 }
 
+export interface ActivityChoice {
+  id: string;
+  label: string;
+  sublabel?: string;
+  votes: string[]; // member IDs or nicknames
+}
+
 export interface Activity {
   id: string;
   time: string;
   title: string;
+  japaneseTitle?: string;
   location: string;
-  category: 'travel' | 'food' | 'cafe' | 'nature' | 'relax' | 'activity' | 'other';
+  category: 'travel' | 'food' | 'cafe' | 'nature' | 'relax' | 'activity' | 'party' | 'other';
   mapUrl?: string;
   notes?: string;
+  imageUrl?: string;
+  badge?: string;
+  choices?: ActivityChoice[];
 }
 
 export interface ItineraryDay {

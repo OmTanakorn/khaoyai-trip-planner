@@ -40,7 +40,25 @@ const FIREBASE_CONFIG_KEY = 'khaoyai_firebase_config';
  * re-apply the build-owned fields on top.
  */
 function withDefaults(data: Partial<TripData>): TripData {
-  return { ...initialTripData, ...data, ...BUILD_OWNED_FIELDS };
+  const merged = { ...initialTripData, ...data, ...BUILD_OWNED_FIELDS };
+  if (!merged.confirmedAccommodation && initialTripData.confirmedAccommodation) {
+    merged.confirmedAccommodation = initialTripData.confirmedAccommodation;
+  }
+  if ((!merged.accommodationOptions || merged.accommodationOptions.length === 0) && initialTripData.accommodationOptions.length > 0) {
+    merged.accommodationOptions = initialTripData.accommodationOptions;
+  }
+  if (!merged.itinerary || merged.itinerary.length === 0 || !merged.itinerary[0]?.activities?.length) {
+    merged.itinerary = initialTripData.itinerary;
+  } else {
+    merged.itinerary = merged.itinerary.map((day) => {
+      if (!day.activities || day.activities.length === 0) {
+        const defaultDay = initialTripData.itinerary.find((d) => d.dayNumber === day.dayNumber);
+        return defaultDay ? { ...day, activities: defaultDay.activities } : day;
+      }
+      return day;
+    });
+  }
+  return merged;
 }
 
 export interface FirebaseConfig {
@@ -328,7 +346,17 @@ export function subscribeToTrip(
       // Once the lists have moved, the subcollection is the whole truth —
       // including when it is empty. Falling back to the copy still sitting
       // inline on the trip document would put back everything just deleted.
-      if (migrated || items.length) bag[list] = sortList(list, items);
+      if (migrated || items.length) {
+        let sorted = sortList(list, items);
+        if (list === 'itinerary') {
+          const itDays = sorted as unknown as { dayNumber: number; activities?: unknown[] }[];
+          const day1 = itDays.find((d) => d.dayNumber === 1);
+          if (!day1 || !day1.activities || day1.activities.length === 0) {
+            sorted = initialTripData.itinerary as unknown as StoredItem[];
+          }
+        }
+        bag[list] = sorted;
+      }
     }
     saveLocalTripData(assembled);
     onData(assembled);

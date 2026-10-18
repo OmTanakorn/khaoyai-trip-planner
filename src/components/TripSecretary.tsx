@@ -1,21 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Sparkles,
   X,
   Send,
   Copy,
   Check,
   MapPin,
-  Car,
-  Home,
   CheckCircle2,
-  AlertCircle,
   Package,
   Bot,
   Settings2,
   ArrowRight,
   ExternalLink,
   Globe,
+  Sparkles,
+  Cpu,
 } from 'lucide-react';
 import { TripData, Member, TripListEditor, PlaceIdea, PackingItem } from '../types/trip';
 
@@ -27,7 +25,7 @@ interface TripSecretaryProps extends TripListEditor {
 
 export type AIProvider = 'openrouter' | 'gemini' | 'custom' | 'builtin';
 
-export const OPENROUTER_MODELS = [
+const OPENROUTER_MODELS = [
   { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash', tag: 'เร็ว & ประหยัด แนะนำ' },
   { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet', tag: 'ฉลาดสุด เรียบเรียงเก่ง' },
   { id: 'openai/gpt-4o-mini', name: 'GPT-4o mini', tag: 'รวดเร็ว ฉับไว' },
@@ -98,6 +96,41 @@ const PACKING_SUGGESTIONS = [
   { title: 'บอร์ดเกม / การ์ดเกมสำหรับสังสรรค์', category: 'shared' as const },
 ];
 
+const renderInlineFormatted = (text: string) => {
+  const boldParts = text.split(/(\*\*.*?\*\*)/g);
+  return boldParts.map((bPart, bIdx) => {
+    if (bPart.startsWith('**') && bPart.endsWith('**')) {
+      return (
+        <strong key={bIdx} className="font-semibold text-ink">
+          {bPart.slice(2, -2)}
+        </strong>
+      );
+    }
+    return bPart;
+  });
+};
+
+const renderFormattedText = (raw: string) => {
+  if (raw.includes('```')) {
+    const parts = raw.split(/(```[\s\S]*?```)/g);
+    return parts.map((part, idx) => {
+      if (part.startsWith('```') && part.endsWith('```')) {
+        const code = part.slice(3, -3).replace(/^\n+|\n+$/g, '');
+        return (
+          <pre
+            key={idx}
+            className="my-2 p-2.5 bg-paper/90 text-ink text-fine font-mono rounded-ctl border border-mist-deep overflow-x-auto select-all"
+          >
+            {code}
+          </pre>
+        );
+      }
+      return <span key={idx}>{renderInlineFormatted(part)}</span>;
+    });
+  }
+  return renderInlineFormatted(raw);
+};
+
 export const TripSecretary: React.FC<TripSecretaryProps> = ({
   trip,
   me,
@@ -105,7 +138,14 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
   onSaveItem,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => [
+    {
+      id: 'msg-welcome',
+      sender: 'ai',
+      text: `สวัสดีครับ ${me ? `คุณ${me.nickname}` : 'เพื่อนร่วมทริป'}\nผมเป็นเลขาทริปเขาใหญ่ ช่วยสรุปความพร้อมของทริป, เช็กที่นั่งรถ, ร่างข้อความส่ง LINE, หรือช่วยแนะนำจุดแวะในเขาใหญ่ให้ได้ทันที อยากให้ผมช่วยอะไรบอกได้เลยครับ`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    },
+  ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [copiedActionId, setCopiedActionId] = useState<string | null>(null);
@@ -144,28 +184,6 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
     (m) => !allAssignedPassengerIds.has(m.id)
   );
   const totalCarSeats = trip.cars.reduce((sum, c) => sum + c.maxSeats, 0);
-
-  // Initial welcome message
-  useEffect(() => {
-    if (messages.length === 0) {
-      const activeEngineText =
-        provider === 'openrouter' && openrouterKey
-          ? `(เชื่อมต่อ OpenRouter: ${openrouterModel})`
-          : provider === 'gemini' && geminiApiKey
-            ? `(เชื่อมต่อ Google Gemini)`
-            : provider === 'custom' && customBaseUrl
-              ? `(เชื่อมต่อ Custom Endpoint)`
-              : `(โหมด Smart Rule Engine)`;
-
-      const welcome: Message = {
-        id: 'msg-welcome',
-        sender: 'ai',
-        text: `สวัสดีครับ ${me ? `คุณ${me.nickname}` : 'เพื่อนร่วมทริป'}! 🌿\nผมเป็นเลขา AI ประจำทริปเขาใหญ่ สองวันหนึ่งคืน ${activeEngineText}\n\nผมช่วยเช็กสถานะทริป, ร่างข้อความตามเพื่อนใน LINE, แนะนำคาเฟ่และร้านเด็ด หรือช่วยตรวจเช็กความพร้อมให้ได้ทันทีครับ อยากให้ผมช่วยอะไรดีครับ?`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages([welcome]);
-    }
-  }, [me, provider, openrouterModel]);
 
   useEffect(() => {
     if (isOpen) {
@@ -227,37 +245,37 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
       (new Date(trip.startDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
     );
 
-    let briefing = `📊 **สรุปสถานะทริปเขาใหญ่ ณ ตอนนี้** (${daysLeft > 0 ? `อีก ${daysLeft} วันเดินทาง` : 'ถึงวันเดินทางแล้ว'})\n\n`;
+    let briefing = `**สรุปสถานะทริปเขาใหญ่ ณ ตอนนี้** (${daysLeft > 0 ? `อีก ${daysLeft} วันเดินทาง` : 'ถึงวันเดินทางแล้ว'})\n\n`;
 
     // 1. Members
-    briefing += `👥 **สมาชิก**: คอนเฟิร์มแล้ว ${confirmedMembers.length} คน (เป้าหมาย 10–12 คน) ${
-      confirmedMembers.length >= 10 ? '✅ ครบแก๊งแล้ว' : `⚠️ ขาดอีก ${10 - confirmedMembers.length} คน`
+    briefing += `• **สมาชิก**: คอนเฟิร์มแล้ว ${confirmedMembers.length} คน (เป้าหมาย 10–12 คน) ${
+      confirmedMembers.length >= 10 ? '(ครบแก๊งแล้ว)' : `(ยังขาดอีก ${10 - confirmedMembers.length} คน)`
     }\n`;
 
     // 2. Cars
-    briefing += `🚗 **รถเดินทาง**: มี ${trip.cars.length} คัน (ที่นั่งรวม ${totalCarSeats} ที่)\n`;
+    briefing += `• **รถเดินทาง**: มี ${trip.cars.length} คัน (ที่นั่งรวม ${totalCarSeats} ที่)\n`;
     if (unassignedMembers.length > 0) {
-      briefing += `   ⚠️ ยังไม่ได้เลือกรถ ${unassignedMembers.length} คน: ${unassignedMembers.map((m) => m.nickname).join(', ')}\n`;
+      briefing += `  - ยังไม่ได้เลือกรถ ${unassignedMembers.length} คน: ${unassignedMembers.map((m) => m.nickname).join(', ')}\n`;
     } else {
-      briefing += `   ✅ ทุกคนมีที่นั่งรถครบแล้ว\n`;
+      briefing += `  - ทุกคนมีที่นั่งรถครบแล้ว\n`;
     }
 
     // 3. Stay
     if (trip.confirmedAccommodation) {
-      briefing += `🏡 **ที่พัก**: จองเรียบร้อยแล้ว (${trip.confirmedAccommodation.name}) ✅\n`;
+      briefing += `• **ที่พัก**: จองเรียบร้อยแล้ว (${trip.confirmedAccommodation.name})\n`;
     } else if (trip.accommodationOptions.length > 0) {
-      briefing += `🏡 **ที่พัก**: มี ${trip.accommodationOptions.length} ตัวเลือก กำลังเปิดโหวต ⏳\n`;
+      briefing += `• **ที่พัก**: มี ${trip.accommodationOptions.length} ตัวเลือก กำลังเปิดโหวต\n`;
     } else {
-      briefing += `🏡 **ที่พัก**: ยังไม่มีตัวเลือกพูลวิลล่า 🔴\n`;
+      briefing += `• **ที่พัก**: ยังไม่มีตัวเลือกพูลวิลล่า\n`;
     }
 
     // 4. Places & Food
-    briefing += `📍 **จุดแวะเที่ยว**: ${trip.placeIdeas.length} แห่ง\n`;
-    briefing += `🍲 **เมนูอาหาร**: ${trip.menuIdeas.length} เมนู\n`;
+    briefing += `• **จุดแวะเที่ยว**: ${trip.placeIdeas.length} แห่ง\n`;
+    briefing += `• **เมนูอาหาร**: ${trip.menuIdeas.length} เมนู\n`;
 
     // 5. Total Expenses
     const totalExp = trip.expenses.reduce((s, e) => s + e.amount, 0);
-    briefing += `💰 **งบใช้จ่ายที่บันทึกแล้ว**: ฿${totalExp.toLocaleString()} บาท`;
+    briefing += `• **งบใช้จ่ายที่บันทึกแล้ว**: ฿${totalExp.toLocaleString()} บาท`;
 
     return {
       id: `msg-${Date.now()}`,
@@ -265,45 +283,45 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
       text: briefing,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       actions: [
-        { label: '🚗 ไปจัดที่นั่งรถ', type: 'go_tab', payload: 'cars' },
-        { label: '🏡 ดูที่พัก', type: 'go_tab', payload: 'stay' },
-        { label: '📍 เพิ่มที่เที่ยว', type: 'go_tab', payload: 'itinerary' },
+        { label: 'ไปจัดที่นั่งรถ', type: 'go_tab', payload: 'cars' },
+        { label: 'ดูที่พัก', type: 'go_tab', payload: 'stay' },
+        { label: 'เพิ่มที่เที่ยว', type: 'go_tab', payload: 'itinerary' },
       ],
     };
   };
 
   const generateLineAnnouncement = (): Message => {
-    let lineText = `📢 [อัปเดตทริปเขาใหญ่ 2 วัน 1 คืน] 🌿⛰️\n`;
-    lineText += `🗓️ วันที่ 31 ต.ค. - 1 พ.ย. 2569\n\n`;
+    let lineText = `[อัปเดตทริปเขาใหญ่ 2 วัน 1 คืน]\n`;
+    lineText += `กำหนดการ: 31 ต.ค. - 1 พ.ย. 2569\n\n`;
 
-    lineText += `👥 ยอดคอนเฟิร์ม: ${confirmedMembers.length} คน\n`;
+    lineText += `ยอดคอนเฟิร์ม: ${confirmedMembers.length} คน\n`;
 
     if (trip.confirmedAccommodation) {
-      lineText += `🏡 ที่พัก: จองแล้วเรียบร้อย (${trip.confirmedAccommodation.name})\n`;
+      lineText += `ที่พัก: จองแล้วเรียบร้อย (${trip.confirmedAccommodation.name})\n`;
     } else {
-      lineText += `🏡 ที่พัก: ช่วยกันเข้าไปโหวตพูลวิลล่าในเว็บหน่อยน้า\n`;
+      lineText += `ที่พัก: ช่วยกันเข้าไปโหวตพูลวิลล่าในเว็บหน่อยน้า\n`;
     }
 
     if (unassignedMembers.length > 0) {
-      lineText += `🚗 รถเดินทาง: ${unassignedMembers.map((m) => `@${m.nickname}`).join(' ')} รบกวนกดเข้าไปเลือกรถในเว็บด่วนน้า (รถเหลือที่ว่างอีก ${totalCarSeats - (confirmedMembers.length - unassignedMembers.length)} ที่)\n`;
+      lineText += `รถเดินทาง: ${unassignedMembers.map((m) => `@${m.nickname}`).join(' ')} รบกวนกดเข้าไปเลือกรถในเว็บด่วนน้า (รถเหลือที่ว่างอีก ${totalCarSeats - (confirmedMembers.length - unassignedMembers.length)} ที่)\n`;
     } else {
-      lineText += `🚗 รถเดินทาง: จัดคนขึ้นรถครบทุกคันแล้ว\n`;
+      lineText += `รถเดินทาง: จัดคนขึ้นรถครบทุกคันแล้ว\n`;
     }
 
     if (trip.placeIdeas.length === 0) {
-      lineText += `☕ ที่เที่ยว/คาเฟ่: ยังไม่มีใครเสนอจุดแวะเลย ใครอยากไปไหนแปะในเว็บได้เลย!\n`;
+      lineText += `ที่เที่ยว/คาเฟ่: ยังไม่มีใครเสนอจุดแวะเลย ใครอยากไปไหนแปะในเว็บได้เลย!\n`;
     }
 
-    lineText += `\n👉 เข้าไปดูข้อมูลและโหวตกันได้ที่นี่:\n${window.location.href}`;
+    lineText += `\nติดตามข้อมูลและโหวตได้ที่:\n${window.location.href}`;
 
     return {
       id: `msg-${Date.now()}`,
       sender: 'ai',
-      text: `ผมร่างข้อความสำหรับส่งเข้า LINE กลุ่มให้แล้วครับ คัดลอกแล้วส่งได้ทันทีเลยครับ 👇\n\n\`\`\`\n${lineText}\n\`\`\``,
+      text: `ผมร่างข้อความสำหรับส่งเข้า LINE กลุ่มให้แล้วครับ คัดลอกแล้วส่งได้ทันทีครับ:\n\n\`\`\`\n${lineText}\n\`\`\``,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       actions: [
         {
-          label: '📋 คัดลอกข้อความส่ง LINE',
+          label: 'คัดลอกข้อความส่ง LINE',
           type: 'copy',
           payload: lineText,
         },
@@ -312,13 +330,13 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
   };
 
   const generateCarReport = (): Message => {
-    let text = `🚗 **รายงานการจัดรถและที่นั่ง**\n\n`;
+    let text = `**รายงานการจัดรถและที่นั่ง**\n\n`;
     text += `• จำนวนรถทั้งหมด: ${trip.cars.length} คัน\n`;
     text += `• ที่นั่งทั้งหมด: ${totalCarSeats} ที่\n`;
     text += `• คนคอนเฟิร์ม: ${confirmedMembers.length} คน\n\n`;
 
     if (trip.cars.length === 0) {
-      text += `⚠️ ตอนนี้ยังไม่มีใครลงชื่ออาสาเอารถไปเลยครับ! ต้องมีคนอาสาอย่างน้อย 2–3 คัน`;
+      text += `ตอนนี้ยังไม่มีใครลงชื่ออาสาเอารถไปเลยครับ แนะนำให้มีคนอาสาอย่างน้อย 2–3 คัน`;
     } else {
       trip.cars.forEach((c, idx) => {
         const available = c.maxSeats - c.passengerIds.length;
@@ -333,11 +351,11 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
       });
 
       if (unassignedMembers.length > 0) {
-        text += `\n⚠️ **คนที่ยังไม่มีที่นั่ง (${unassignedMembers.length} คน)**: ${unassignedMembers
+        text += `\n**คนที่ยังไม่มีที่นั่ง (${unassignedMembers.length} คน)**: ${unassignedMembers
           .map((m) => m.nickname)
           .join(', ')}`;
       } else {
-        text += `\n🎉 ยอดเยี่ยมมาก ทุกคนมีรถนั่งเรียบร้อยแล้วครับ`;
+        text += `\nยอดเยี่ยมมาก ทุกคนมีรถนั่งเรียบร้อยแล้วครับ`;
       }
     }
 
@@ -346,7 +364,7 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
       sender: 'ai',
       text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      actions: [{ label: '🚗 ไปหน้าจัดรถ', type: 'go_tab', payload: 'cars' }],
+      actions: [{ label: 'ไปหน้าจัดรถ', type: 'go_tab', payload: 'cars' }],
     };
   };
 
@@ -354,7 +372,7 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
     return {
       id: `msg-${Date.now()}`,
       sender: 'ai',
-      text: `☕ **แนะนำจุดแวะ & ร้านเด็ดเขาใหญ่สำหรับแก๊งเพื่อน**\n\nผมคัดเลือกสถานที่ยอดนิยมที่เหมาะกับกลุ่ม 10–12 คนมาให้แล้วครับ สามารถกดปุ่ม **[+ ปักหมุดลงทริป]** ใต้ข้อความนี้เพื่อเพิ่มเข้าตารางเที่ยวได้เลยทันที!`,
+      text: `**แนะนำจุดแวะ & ร้านเด็ดเขาใหญ่สำหรับแก๊งเพื่อน**\n\nผมคัดเลือกสถานที่ยอดนิยมที่เหมาะกับกลุ่ม 10–12 คนมาให้แล้วครับ สามารถกดปุ่ม **[+ ปักหมุดลงทริป]** ใต้ข้อความนี้เพื่อเพิ่มเข้าตารางเที่ยวได้เลยทันที!`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       actions: KHAOYAI_RECOMMENDATIONS.slice(0, 4).map((rec) => ({
         label: `+ ปักหมุด ${rec.title}`,
@@ -368,7 +386,7 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
     return {
       id: `msg-${Date.now()}`,
       sender: 'ai',
-      text: `🎒 **ของสำคัญที่แนะนำให้พกไปเขาใหญ่ช่วงนี้ (ปลายฝนต้นหนาว)**\n\nกลางคืนที่เขาใหญ่อากาศจะเริ่มเย็นสบาย และพูลวิลล่ายอดฮิตมักจะต้องเตรียมปลั๊กพ่วงและอุปกรณ์เสริมไปด้วย กดปุ่มด้านล่างเพื่อเพิ่มเข้ารายการเตรียมของได้ทันทีครับ:`,
+      text: `**ของสำคัญที่แนะนำให้พกไปเขาใหญ่ช่วงนี้ (ปลายฝนต้นหนาว)**\n\nกลางคืนที่เขาใหญ่อากาศจะเริ่มเย็นสบาย และพูลวิลล่ายอดฮิตมักจะต้องเตรียมปลั๊กพ่วงและอุปกรณ์เสริมไปด้วย กดปุ่มด้านล่างเพื่อเพิ่มเข้ารายการเตรียมของได้ทันทีครับ:`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       actions: PACKING_SUGGESTIONS.map((item) => ({
         label: `+ เพิ่ม "${item.title}"`,
@@ -477,7 +495,7 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
         const errMsg: Message = {
           id: `ai-${Date.now()}`,
           sender: 'ai',
-          text: `⚠️ เชื่อมต่อ OpenRouter ไม่สำเร็จ: ${err.message || 'กรุณาตรวจสอบ API Key'}\nกำลังสลับใช้ Smart Rule Engine ชั่วคราว...`,
+          text: `เชื่อมต่อ OpenRouter ไม่สำเร็จ: ${err.message || 'กรุณาตรวจสอบ API Key'}\nกำลังสลับใช้ Smart Rule Engine ชั่วคราว...`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         };
         setMessages((prev) => [...prev, errMsg]);
@@ -592,10 +610,10 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
         replyText = pack.text;
         actions = pack.actions;
       } else {
-        replyText = `ได้รับคำถามเรื่อง "${userText}" แล้วครับ! 🌲\n\nผมได้วิเคราะห์ข้อมูลทริปเขาใหญ่ของเราแล้ว:\n• มีเพื่อนร่วมทริป ${confirmedMembers.length} คน\n• ${trip.confirmedAccommodation ? `ที่พักจองเรียบร้อยแล้วที่ ${trip.confirmedAccommodation.name}` : 'ยังรอสรุปที่พัก'}\n• รถมีทั้งหมด ${trip.cars.length} คัน\n\nคุณสามารถกดปุ่มลัดด้านบนเพื่อให้ผมสรุปสถานะ ร่างข้อความ LINE หรือแนะนำที่เที่ยวเขาใหญ่ได้เลยครับ!`;
+        replyText = `ได้รับคำถามเรื่อง "${userText}" แล้วครับ\n\nผมได้วิเคราะห์ข้อมูลทริปเขาใหญ่ของเราแล้ว:\n• มีเพื่อนร่วมทริป ${confirmedMembers.length} คน\n• ${trip.confirmedAccommodation ? `ที่พักจองเรียบร้อยแล้วที่ ${trip.confirmedAccommodation.name}` : 'ยังรอสรุปที่พัก'}\n• รถมีทั้งหมด ${trip.cars.length} คัน\n\nคุณสามารถกดปุ่มลัดด้านบนเพื่อให้ผมสรุปสถานะ ร่างข้อความ LINE หรือแนะนำที่เที่ยวเขาใหญ่ได้เลยครับ!`;
         actions = [
-          { label: '📊 สรุปภาพรวมทริป', type: 'go_tab', payload: 'overview' },
-          { label: '☕ แนะนำที่เที่ยว', type: 'go_tab', payload: 'itinerary' },
+          { label: 'สรุปภาพรวมทริป', type: 'go_tab', payload: 'overview' },
+          { label: 'แนะนำที่เที่ยว', type: 'go_tab', payload: 'itinerary' },
         ];
       }
 
@@ -615,56 +633,53 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
   const getProviderBadge = () => {
     if (provider === 'openrouter') {
       const shortModel = openrouterModel.split('/')[1] || openrouterModel;
-      return openrouterKey ? `🌐 OpenRouter: ${shortModel}` : '🌐 OpenRouter (ใส่ Key)';
+      return openrouterKey ? `OpenRouter: ${shortModel}` : 'OpenRouter';
     }
     if (provider === 'gemini') {
-      return geminiApiKey ? '✨ Gemini Direct' : '✨ Gemini (ใส่ Key)';
+      return geminiApiKey ? 'Gemini' : 'Gemini (รอ Key)';
     }
     if (provider === 'custom') {
-      return '⚙️ Custom AI';
+      return 'Custom Endpoint';
     }
-    return '⚡ Smart Local';
+    return 'Smart Local';
   };
 
   return (
     <>
-      {/* ── Floating Action Button (FAB) ────────────────────── */}
-      <aside aria-label="ผู้ช่วยทริป AI" className="fixed bottom-6 right-6 z-40">
+      {/* ── Floating Launcher ────────────────────────── */}
+      <aside aria-label="ผู้ช่วยทริป" className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40" data-print="hide">
         {!isOpen && (
           <button
             onClick={() => setIsOpen(true)}
-            className="group flex items-center gap-2.5 px-4 py-3 bg-ink hover:bg-ink-soft text-paper rounded-full shadow-lg shadow-ink/25 transition-colors cursor-pointer"
+            className="group flex items-center gap-2 px-4 py-2.5 bg-paper hover:bg-surface text-ink border border-mist-deep/80 rounded-full shadow-md hover:shadow-lg transition-all cursor-pointer"
           >
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brass opacity-75" />
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-brass" />
+            <span className="w-6 h-6 rounded-full bg-surface grid place-items-center text-brass group-hover:bg-mist-deep/70 transition-colors">
+              <Bot className="w-3.5 h-3.5" />
             </span>
-            <Sparkles className="w-4 h-4 text-brass-lit" />
-            <span className="font-display text-body tracking-wide font-medium">
-              เลขาทริป AI
-            </span>
+            <span className="text-fine font-medium">เลขาทริป</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-moss" aria-hidden="true" title="พร้อมตอบคำถาม" />
           </button>
         )}
       </aside>
 
-      {/* ── Slide-over / Modal Assistant ────────────────────── */}
+      {/* ── Slide-over Assistant ────────────────────── */}
       {isOpen && (
         <aside
           role="dialog"
-          aria-label="แผงพูดคุยกับเลขาทริป AI"
+          aria-label="แผงพูดคุยกับเลขาทริป"
           aria-modal="true"
-          className="fixed inset-y-0 right-0 z-50 w-full sm:w-[500px] bg-paper shadow-[-24px_0_48px_-24px_rgba(27,59,43,0.18)] flex flex-col animate-in slide-in-from-right duration-300"
+          className="fixed inset-y-0 right-0 z-50 w-full sm:w-[480px] bg-paper border-l border-mist-deep flex flex-col animate-in slide-in-from-right duration-200"
         >
           {/* Header */}
           <div className="px-5 py-4 bg-ink text-paper flex items-center justify-between border-b border-paper/10">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-moss flex items-center justify-center border border-brass/40 text-brass-lit">
-                <Bot className="w-5 h-5" />
+              <div className="w-8 h-8 rounded-full bg-surface/15 flex items-center justify-center text-brass-lit">
+                <Bot className="w-4 h-4" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-display text-lead text-paper font-normal">เลขาทริป AI</h3>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-brass/25 text-brass-lit font-medium">
+                  <h3 className="font-display text-body text-paper font-semibold">เลขาทริป</h3>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface/20 text-mist/90">
                     {getProviderBadge()}
                   </span>
                 </div>
@@ -674,19 +689,20 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               <button
                 onClick={() => setShowSettings(!showSettings)}
-                title="ตั้งค่า AI Provider (OpenRouter / Gemini)"
-                className="p-2 text-mist/70 hover:text-paper hover:bg-paper/10 rounded-full transition-colors cursor-pointer"
+                title="ตั้งค่า AI Provider"
+                className="p-2 text-mist/70 hover:text-paper hover:bg-paper/10 rounded-ctl transition-colors cursor-pointer"
               >
                 <Settings2 className="w-4 h-4" />
               </button>
               <button
                 onClick={() => setIsOpen(false)}
-                className="p-2 text-mist/70 hover:text-paper hover:bg-paper/10 rounded-full transition-colors cursor-pointer"
+                className="p-2 text-mist/70 hover:text-paper hover:bg-paper/10 rounded-ctl transition-colors cursor-pointer"
+                aria-label="ปิด"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -723,7 +739,10 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
                           : 'bg-ink border-paper/20 text-mist hover:text-paper'
                       }`}
                     >
-                      <span className="block font-medium">🌐 OpenRouter</span>
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <Globe className="w-3.5 h-3.5 shrink-0" />
+                        <span>OpenRouter</span>
+                      </span>
                       <span className="text-[11px] opacity-80">Claude, GPT, Gemini...</span>
                     </button>
 
@@ -736,7 +755,10 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
                           : 'bg-ink border-paper/20 text-mist hover:text-paper'
                       }`}
                     >
-                      <span className="block font-medium">✨ Google Gemini</span>
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                        <span>Google Gemini</span>
+                      </span>
                       <span className="text-[11px] opacity-80">Gemini 1.5 Flash API</span>
                     </button>
 
@@ -749,7 +771,10 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
                           : 'bg-ink border-paper/20 text-mist hover:text-paper'
                       }`}
                     >
-                      <span className="block font-medium">⚙️ Custom Endpoint</span>
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <Settings2 className="w-3.5 h-3.5 shrink-0" />
+                        <span>Custom Endpoint</span>
+                      </span>
                       <span className="text-[11px] opacity-80">Ollama, LM Studio, Groq</span>
                     </button>
 
@@ -762,7 +787,10 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
                           : 'bg-ink border-paper/20 text-mist hover:text-paper'
                       }`}
                     >
-                      <span className="block font-medium">⚡ Smart Local</span>
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <Cpu className="w-3.5 h-3.5 shrink-0" />
+                        <span>Smart Local</span>
+                      </span>
                       <span className="text-[11px] opacity-80">ไม่ต้องใช้ Key (ออฟไลน์)</span>
                     </button>
                   </div>
@@ -930,36 +958,36 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
           )}
 
           {/* Quick Action Prompt Chips */}
-          <div className="px-4 py-2.5 bg-mist/60 border-b border-mist-deep flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <div className="px-4 py-2.5 bg-surface/50 border-b border-mist-deep flex items-center gap-1.5 overflow-x-auto no-scrollbar">
             <button
               onClick={() => handleQuickPrompt('brief')}
-              className="px-2.5 py-1 bg-paper hover:bg-brass hover:text-ink text-fine text-ink border border-mist-deep rounded-full whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1 bg-paper hover:bg-surface text-fine text-ink border border-mist-deep/70 rounded-full whitespace-nowrap transition-colors cursor-pointer"
             >
-              📊 สรุปทริป
+              สรุปสถานะทริป
             </button>
             <button
               onClick={() => handleQuickPrompt('line')}
-              className="px-2.5 py-1 bg-paper hover:bg-brass hover:text-ink text-fine text-ink border border-mist-deep rounded-full whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1 bg-paper hover:bg-surface text-fine text-ink border border-mist-deep/70 rounded-full whitespace-nowrap transition-colors cursor-pointer"
             >
-              📢 ร่างส่ง LINE
+              ร่างส่ง LINE
             </button>
             <button
               onClick={() => handleQuickPrompt('cars')}
-              className="px-2.5 py-1 bg-paper hover:bg-brass hover:text-ink text-fine text-ink border border-mist-deep rounded-full whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1 bg-paper hover:bg-surface text-fine text-ink border border-mist-deep/70 rounded-full whitespace-nowrap transition-colors cursor-pointer"
             >
-              🚗 ใครยังไม่มีรถ
+              เช็กที่นั่งรถ
             </button>
             <button
               onClick={() => handleQuickPrompt('places')}
-              className="px-2.5 py-1 bg-paper hover:bg-brass hover:text-ink text-fine text-ink border border-mist-deep rounded-full whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1 bg-paper hover:bg-surface text-fine text-ink border border-mist-deep/70 rounded-full whitespace-nowrap transition-colors cursor-pointer"
             >
-              ☕ แนะนำที่เที่ยว
+              แนะนำจุดแวะ
             </button>
             <button
               onClick={() => handleQuickPrompt('packing')}
-              className="px-2.5 py-1 bg-paper hover:bg-brass hover:text-ink text-fine text-ink border border-mist-deep rounded-full whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1 bg-paper hover:bg-surface text-fine text-ink border border-mist-deep/70 rounded-full whitespace-nowrap transition-colors cursor-pointer"
             >
-              🎒 ของต้องเตรียม
+              ของต้องเตรียม
             </button>
           </div>
 
@@ -971,17 +999,17 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
                 className={`flex flex-col ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}
               >
                 <div
-                  className={`max-w-[90%] p-3.5 rounded-lg text-body leading-relaxed whitespace-pre-wrap ${
+                  className={`max-w-[88%] p-3.5 rounded-panel text-body leading-relaxed whitespace-pre-wrap ${
                     msg.sender === 'user'
-                      ? 'bg-ink text-paper'
-                      : 'bg-white text-ink border border-mist-deep'
+                      ? 'bg-ink text-paper rounded-tr-xs'
+                      : 'bg-surface/70 border border-mist-deep/70 text-ink rounded-tl-xs'
                   }`}
                 >
-                  {msg.text}
+                  {renderFormattedText(msg.text)}
 
                   {/* Message Action Buttons */}
                   {msg.actions && msg.actions.length > 0 && (
-                    <div className="mt-3.5 pt-3 border-t border-mist-deep/60 flex flex-wrap gap-2">
+                    <div className="mt-3 pt-3 border-t border-mist-deep/60 flex flex-wrap gap-2">
                       {msg.actions.map((act, idx) => {
                         const actId = `${msg.id}-${idx}`;
                         if (act.type === 'copy') {
@@ -989,12 +1017,12 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
                             <button
                               key={actId}
                               onClick={() => handleCopyText(act.payload, actId)}
-                              className="px-3 py-1.5 bg-brass hover:bg-brass-lit text-ink text-fine font-medium rounded-ctl transition-colors flex items-center gap-1.5 cursor-pointer"
+                              className="px-3 py-1.5 bg-brass-lit hover:bg-brass text-ink hover:text-paper text-fine font-medium rounded-ctl transition-colors flex items-center gap-1.5 cursor-pointer"
                             >
                               {copiedActionId === actId ? (
                                 <>
                                   <Check className="w-3.5 h-3.5" />
-                                  <span>คัดลอกแล้ว!</span>
+                                  <span>คัดลอกแล้ว</span>
                                 </>
                               ) : (
                                 <>
@@ -1011,9 +1039,9 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
                             <button
                               key={actId}
                               onClick={() => handleAddPlace(act.payload)}
-                              className="px-3 py-1.5 bg-moss/10 hover:bg-moss hover:text-paper text-moss text-fine font-medium border border-moss/30 rounded-ctl transition-colors flex items-center gap-1.5 cursor-pointer"
+                              className="px-3 py-1.5 bg-paper hover:bg-mist-deep/50 text-ink text-fine font-medium border border-mist-deep rounded-ctl transition-colors flex items-center gap-1.5 cursor-pointer"
                             >
-                              <MapPin className="w-3.5 h-3.5" />
+                              <MapPin className="w-3.5 h-3.5 text-brass" />
                               <span>{act.label}</span>
                             </button>
                           );
@@ -1024,9 +1052,9 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
                             <button
                               key={actId}
                               onClick={() => handleAddPackingItem(act.payload)}
-                              className="px-3 py-1.5 bg-brass/15 hover:bg-brass hover:text-ink text-ink text-fine font-medium border border-brass/40 rounded-ctl transition-colors flex items-center gap-1.5 cursor-pointer"
+                              className="px-3 py-1.5 bg-paper hover:bg-mist-deep/50 text-ink text-fine font-medium border border-mist-deep rounded-ctl transition-colors flex items-center gap-1.5 cursor-pointer"
                             >
-                              <Package className="w-3.5 h-3.5" />
+                              <Package className="w-3.5 h-3.5 text-stone" />
                               <span>{act.label}</span>
                             </button>
                           );
@@ -1040,7 +1068,7 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
                                 setActiveTab(act.payload);
                                 setIsOpen(false);
                               }}
-                              className="px-3 py-1.5 bg-mist/60 hover:bg-ink hover:text-paper text-ink text-fine font-medium rounded-ctl transition-colors flex items-center gap-1 cursor-pointer"
+                              className="px-3 py-1.5 bg-ink hover:bg-ink-soft text-paper text-fine font-medium rounded-ctl transition-colors flex items-center gap-1 cursor-pointer"
                             >
                               <span>{act.label}</span>
                               <ArrowRight className="w-3 h-3" />
@@ -1053,16 +1081,16 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
                     </div>
                   )}
                 </div>
-                <span className="text-[11px] text-stone mt-1 px-1">{msg.timestamp}</span>
+                <span className="text-fine text-stone/70 mt-1 px-1">{msg.timestamp}</span>
               </div>
             ))}
 
             {isTyping && (
-              <div className="flex items-center gap-2 text-fine text-stone py-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-brass animate-pulse" />
-                <div className="w-1.5 h-1.5 rounded-full bg-brass animate-pulse [animation-delay:0.2s]" />
-                <div className="w-1.5 h-1.5 rounded-full bg-brass animate-pulse [animation-delay:0.4s]" />
-                <span>เลขากำลังคิดคำตอบ...</span>
+              <div className="flex items-center gap-2 text-fine text-stone py-2 px-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-stone/40 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-stone/40 animate-pulse [animation-delay:0.2s]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-stone/40 animate-pulse [animation-delay:0.4s]" />
+                <span>กำลังคิดคำตอบ…</span>
               </div>
             )}
             <div ref={messagesEndRef} />
@@ -1071,23 +1099,20 @@ export const TripSecretary: React.FC<TripSecretaryProps> = ({
           {/* Chat Input Bar */}
           <form
             onSubmit={handleSendMessage}
-            className="p-3 bg-white border-t border-mist-deep flex items-center gap-2"
+            className="p-3 bg-paper border-t border-mist-deep flex items-center gap-2"
           >
             <input
               type="text"
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder={
-                provider === 'openrouter' && !openrouterKey
-                  ? 'ใส่ OpenRouter Key ที่ไอคอน ⚙️ เพื่อปลดล็อก AI เต็มรูปแบบ...'
-                  : 'ถามเลขา เช่น แนะนำมื้อเย็น, ทริปขาดอะไร...'
-              }
-              className="flex-1 px-3.5 py-2.5 text-body bg-mist/40 border border-mist-deep rounded-ctl focus:outline-none focus:border-brass text-ink"
+              placeholder="ถามเลขา เช่น แนะนำมื้อเย็น, ทริปขาดอะไร..."
+              className="flex-1 px-3.5 py-2 text-body bg-surface/60 border border-transparent rounded-ctl focus:outline-none focus:bg-paper focus:border-ink/40 text-ink placeholder:text-stone/60 transition-colors"
             />
             <button
               type="submit"
               disabled={!inputMessage.trim() || isTyping}
-              className="px-4 py-2.5 bg-ink hover:bg-moss disabled:opacity-40 text-paper rounded-ctl transition-colors cursor-pointer flex items-center justify-center shrink-0"
+              className="px-4 py-2 bg-ink hover:bg-ink-soft disabled:opacity-40 text-paper rounded-ctl transition-colors cursor-pointer flex items-center justify-center shrink-0"
+              aria-label="ส่งข้อความ"
             >
               <Send className="w-4 h-4" />
             </button>

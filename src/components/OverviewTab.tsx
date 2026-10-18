@@ -256,44 +256,54 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         <img
           src={trip.coverImage}
           alt="ช้างป่าเดินข้ามถนนในเขาใหญ่ รถจอดรอให้ผ่าน"
-          className="absolute inset-0 w-full h-full object-cover opacity-50"
+          className="absolute inset-0 w-full h-full object-cover opacity-45"
         />
         <div
-          className="absolute inset-0 bg-gradient-to-r from-ink via-ink/80 to-ink/20"
+          className="absolute inset-0 bg-gradient-to-t sm:bg-gradient-to-r from-ink via-ink/85 to-ink/35"
           aria-hidden="true"
         />
 
-        <div className="relative grid md:grid-cols-[1fr_20rem] lg:grid-cols-[1fr_22rem] gap-8 px-5 sm:px-10 py-8 sm:py-12 min-h-[24rem]">
-          <div className="flex flex-col">
-            <p className="text-fine text-brass-lit">{trip.destination}</p>
-            <h1 className="mt-3 font-display text-title sm:text-display text-paper max-w-xl">
-              {trip.title}
-            </h1>
-            <p className="mt-3 text-lead text-mist/90">
-              {thaiDate(trip.startDate)} – {thaiDate(trip.endDate)} {yearBE}
-              <span className="text-brass-lit whitespace-nowrap"> {countdown}</span>
-            </p>
+        <div className="relative grid md:grid-cols-[1fr_20rem] lg:grid-cols-[1fr_22rem] gap-8 px-5 sm:px-10 py-8 sm:py-12 min-h-[22rem]">
+          <div className="flex flex-col justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-fine font-medium tracking-wide uppercase text-brass-lit">
+                  {trip.destination}
+                </span>
+                <span className="w-1 h-1 rounded-full bg-brass-lit/60 shrink-0" aria-hidden="true" />
+                <span className="px-2.5 py-0.5 rounded-full text-fine bg-brass-lit/15 text-brass-lit border border-brass-lit/25 whitespace-nowrap shrink-0">
+                  {countdown}
+                </span>
+              </div>
+              <h1 className="mt-3 font-display text-title sm:text-display text-paper max-w-xl leading-tight">
+                {trip.title}
+              </h1>
+              <p className="mt-3 text-lead text-mist/90">
+                {thaiDate(trip.startDate)} – {thaiDate(trip.endDate)} {yearBE}
+              </p>
+            </div>
 
-            <div className="mt-auto pt-10">
+            <div className="pt-8">
               {confirmedMembers.length > 0 ? (
                 <button
                   onClick={() => setActiveTab('members')}
-                  className="group flex items-center gap-3 text-left"
+                  className="group flex items-center gap-3 text-left cursor-pointer"
                 >
-                  <span className="flex -space-x-1.5" aria-hidden="true">
-                    {confirmedMembers.slice(0, 12).map((m) => (
+                  <div className="flex -space-x-1.5" aria-hidden="true">
+                    {confirmedMembers.slice(0, 10).map((m) => (
                       <span
                         key={m.id}
-                        className="w-7 h-7 rounded-full grid place-items-center text-[11px] font-medium text-paper ring-2 ring-ink"
+                        className="w-7 h-7 rounded-full grid place-items-center text-fine font-medium text-paper ring-2 ring-ink"
                         style={{ backgroundColor: m.avatarColor }}
+                        title={m.nickname}
                       >
                         {initialOf(m.nickname)}
                       </span>
                     ))}
-                  </span>
-                  <span className="text-fine text-mist/80 group-hover:text-paper transition-colors">
-                    ไปแน่ {confirmedMembers.length} คน
-                    {maybeCount > 0 && ` ขอดูก่อนอีก ${maybeCount}`}
+                  </div>
+                  <span className="text-fine text-mist/90 group-hover:text-paper transition-colors">
+                    ไปแน่นอน <strong className="font-semibold text-paper">{confirmedMembers.length} คน</strong>
+                    {maybeCount > 0 && ` · ดูก่อนอีก ${maybeCount} คน`}
                   </span>
                 </button>
               ) : (
@@ -302,46 +312,52 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
             </div>
           </div>
 
-          {/* Personal plan — the three things a friend opens the link to check */}
-          <div className="self-end bg-paper text-ink rounded-panel p-5">
+          {/* Personal plan */}
+          <div className="self-end bg-paper text-ink rounded-panel p-5 sm:p-6 border border-mist-deep/40 shadow-sm">
             {me ? (
               <>
-                <div className="flex items-center gap-2.5">
-                  <span
-                    className="w-7 h-7 rounded-full grid place-items-center text-fine font-medium text-paper"
-                    style={{ backgroundColor: me.avatarColor }}
-                    aria-hidden="true"
+                <div className="flex items-center justify-between gap-3 pb-3 border-b border-mist-deep/60">
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      className="w-7 h-7 rounded-full grid place-items-center text-fine font-medium text-paper shrink-0"
+                      style={{ backgroundColor: me.avatarColor }}
+                      aria-hidden="true"
+                    >
+                      {initialOf(me.nickname)}
+                    </span>
+                    <div>
+                      <p className="text-body font-semibold text-ink leading-none">แผนของ{me.nickname}</p>
+                      <p className="text-[11px] text-stone mt-0.5">สถานะในทริปของคุณ</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onChooseMe(null)}
+                    className="text-fine text-stone hover:text-ink transition-colors cursor-pointer"
                   >
-                    {initialOf(me.nickname)}
-                  </span>
-                  <p className="text-body font-semibold">แผนของ{me.nickname}</p>
+                    สลับชื่อ
+                  </button>
                 </div>
 
-                <dl className="mt-4 divide-y divide-mist-deep/70">
-                  <div className="py-3 flex items-start justify-between gap-3">
+                <dl className="mt-2 divide-y divide-mist-deep/60">
+                  <div className="py-2.5 flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <dt className="text-fine text-stone">รถ</dt>
-                      <dd className="text-body truncate">
+                      <dt className="text-fine text-stone">ที่นั่งรถ</dt>
+                      <dd className="text-body font-medium text-ink truncate">
                         {myCar ? myCar.driverName : 'ยังไม่มีที่นั่ง'}
                       </dd>
-                      {myCar && (
-                        <dd className="text-fine text-stone truncate">
-                          {myCar.departureTime} {myCar.meetingPoint}
-                        </dd>
-                      )}
                     </div>
                     <button
                       onClick={() => setActiveTab('cars')}
-                      className={`${btnLink} shrink-0 mt-4`}
+                      className={`${btnLink} shrink-0`}
                     >
                       {myCar ? 'ดูรถ' : 'เลือกรถ'}
                     </button>
                   </div>
 
-                  <div className="py-3 flex items-start justify-between gap-3">
+                  <div className="py-2.5 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <dt className="text-fine text-stone">ห้องนอน</dt>
-                      <dd className="text-body truncate">
+                      <dd className="text-body font-medium text-ink truncate">
                         {myRoom
                           ? myRoom.roomName
                           : trip.confirmedAccommodation
@@ -351,26 +367,26 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                     </div>
                     <button
                       onClick={() => setActiveTab('stay')}
-                      className={`${btnLink} shrink-0 mt-4`}
+                      className={`${btnLink} shrink-0`}
                     >
                       {myRoom ? 'ดูห้อง' : trip.confirmedAccommodation ? 'เลือกห้อง' : 'ไปโหวต'}
                     </button>
                   </div>
 
-                  <div className="py-3 flex items-start justify-between gap-3">
+                  <div className="py-2.5 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <dt className="text-fine text-stone">ค่าใช้จ่าย</dt>
-                      <dd className={`text-body ${myNet < 0 ? 'text-brass font-medium' : ''}`}>
+                      <dd className={`text-body font-medium ${myNet < 0 ? 'text-brass' : 'text-ink'}`}>
                         {myNet < 0
                           ? `ต้องโอนอีก ${baht(-myNet)}`
                           : myNet > 0
-                          ? `เพื่อนต้องคืนคุณ ${baht(myNet)}`
+                          ? `เพื่อนต้องคืน ${baht(myNet)}`
                           : 'ไม่มียอดค้าง'}
                       </dd>
                     </div>
                     <button
                       onClick={() => setActiveTab('expenses')}
-                      className={`${btnLink} shrink-0 mt-4`}
+                      className={`${btnLink} shrink-0`}
                     >
                       {myNet < 0 ? 'จ่ายเลย' : 'ดูยอด'}
                     </button>
@@ -396,18 +412,18 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       </section>
 
       {/* ── Readiness: four things that decide whether the trip happens ── */}
-      <section className="bg-surface rounded-panel grid grid-cols-2 md:grid-cols-4">
+      <section className="bg-surface rounded-panel divide-y sm:divide-y-0 sm:divide-x divide-mist-deep/70 grid grid-cols-2 sm:grid-cols-4 overflow-hidden">
         {readiness.map((item) => (
           <button
             key={item.tab}
             onClick={() => setActiveTab(item.tab)}
-            className="text-left px-5 sm:px-6 py-5 rounded-panel hover:bg-mist-deep/40 transition-colors min-w-0"
+            className="text-left px-3.5 sm:px-6 py-3.5 sm:py-5 hover:bg-mist-deep/30 transition-colors min-w-0 cursor-pointer group"
           >
-            <p className="text-fine text-stone">{item.label}</p>
-            <p className="mt-1 text-lead font-semibold text-ink">{item.value}</p>
-            <p className="mt-1.5 truncate">
+            <p className="text-[11px] sm:text-fine text-stone tracking-wide">{item.label}</p>
+            <p className="mt-0.5 sm:mt-1 text-lead font-semibold text-ink group-hover:text-brass transition-colors tabular-nums">{item.value}</p>
+            <div className="mt-1 sm:mt-1.5 truncate">
               <Tag tone={item.done ? 'go' : 'wait'}>{item.state}</Tag>
-            </p>
+            </div>
           </button>
         ))}
       </section>
@@ -460,12 +476,12 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
               <h3 className="text-body font-semibold text-ink">{dayTitle(day.dayLabel)}</h3>
 
               {route.stops.length === 0 ? (
-                <div className="mt-4 flex-1">
+                <div className="mt-4 flex-1 flex flex-col items-start">
                   <p className="text-body text-stone">
                     วันนี้ยังว่าง ดึงที่เที่ยวที่เพื่อนเสนอไว้ลงตาราง แล้วเส้นทางจะขึ้นบนแผนผังนี้
                   </p>
-                  <button onClick={() => setActiveTab('itinerary')} className={`${btnLink} mt-4`}>
-                    ไปจัดตารางเที่ยว
+                  <button onClick={() => setActiveTab('itinerary')} className={`${btnSolid} mt-5 inline-flex items-center gap-1.5`}>
+                    จัดตารางเที่ยว
                   </button>
                 </div>
               ) : (
@@ -522,20 +538,20 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                       </p>
                     )}
                   </div>
+
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {mapsUrl && (
+                      <a href={mapsUrl} target="_blank" rel="noreferrer" className={`${btnSolid} inline-flex items-center gap-2`}>
+                        <MapPinned className="w-4 h-4" aria-hidden="true" />
+                        เปิดใน Google Maps
+                      </a>
+                    )}
+                    <button onClick={() => setActiveTab('itinerary')} className={btnQuiet}>
+                      แก้ไขตาราง
+                    </button>
+                  </div>
                 </>
               )}
-
-              <div className="mt-5 flex flex-wrap gap-2">
-                {mapsUrl && (
-                  <a href={mapsUrl} target="_blank" rel="noreferrer" className={`${btnSolid} inline-flex items-center gap-2`}>
-                    <MapPinned className="w-4 h-4" aria-hidden="true" />
-                    เปิดใน Google Maps
-                  </a>
-                )}
-                <button onClick={() => setActiveTab('itinerary')} className={btnQuiet}>
-                  แก้ตาราง
-                </button>
-              </div>
             </div>
           </div>
         </section>

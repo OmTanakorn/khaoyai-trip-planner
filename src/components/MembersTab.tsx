@@ -1,9 +1,27 @@
-import React, { useState } from 'react';
-import { Phone, Trash2, Pencil, Plus } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import {
+  Users,
+  Plus,
+  Trash2,
+  Pencil,
+  Phone,
+  Car,
+  Home,
+  QrCode,
+  ShieldCheck,
+  CheckCircle2,
+  AlertCircle,
+  Copy,
+  Check,
+  Search,
+  UserCheck,
+  Crown,
+  ExternalLink,
+} from 'lucide-react';
 import { TripData, Member, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
-import { PageHead, Panel, Modal, Field, Empty, Tag } from './ui';
-import { input, btnSolid, btnQuiet, btnLink } from './ui-kit';
+import { PageHead, Panel, Modal, Field, Empty, Meter } from './ui';
+import { input, btnSolid, btnQuiet, btnBrass, btnLink, initialOf } from './ui-kit';
 
 interface MembersTabProps extends TripListEditor {
   trip: TripData;
@@ -13,8 +31,8 @@ interface MembersTabProps extends TripListEditor {
 }
 
 const AVATAR_COLORS = [
-  '#2f4a3c', '#a88d4f', '#6e7a72', '#1b2e27', '#c7ac72', '#4a6b57',
-  '#8c7340', '#3d5a4a', '#b09a6a', '#55665c', '#7d6b3f', '#42574b',
+  '#1b3b2b', '#a8782f', '#4a6b57', '#8c7340', '#3d5a4a',
+  '#2f5a45', '#7d6b3f', '#55665c', '#b09a6a', '#42574b',
 ];
 
 export const MembersTab: React.FC<MembersTabProps> = ({
@@ -25,9 +43,16 @@ export const MembersTab: React.FC<MembersTabProps> = ({
   me,
   onChooseMe,
 }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'confirmed' | 'drivers' | 'organizer' | 'unassigned'>(
+    'all'
+  );
+
+  // Modal State
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
 
+  // Form Fields
   const [name, setName] = useState('');
   const [nickname, setNickname] = useState('');
   const [phone, setPhone] = useState('');
@@ -35,11 +60,39 @@ export const MembersTab: React.FC<MembersTabProps> = ({
   const [status, setStatus] = useState<Member['status']>('confirmed');
   const [role, setRole] = useState<Member['role']>('member');
   const [paidDeposit, setPaidDeposit] = useState(true);
+  const [hasCarVolunteer, setHasCarVolunteer] = useState(false);
+  const [carSeatsOffered, setCarSeatsOffered] = useState(4);
   const [isMe, setIsMe] = useState(false);
 
-  const confirmedCount = trip.members.filter((m) => m.status === 'confirmed').length;
-  const maybeCount = trip.members.filter((m) => m.status === 'maybe').length;
-  const depositCount = trip.members.filter((m) => m.paidDeposit).length;
+  // Toast / Copy Feedback
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const members = useMemo(() => trip.members ?? [], [trip.members]);
+  const confirmedMembers = useMemo(
+    () => members.filter((m) => m.status === 'confirmed'),
+    [members]
+  );
+  const driverMembers = useMemo(
+    () =>
+      members.filter((m) =>
+        trip.cars.some(
+          (c) =>
+            c.driverName.includes(m.nickname) ||
+            c.driverName.includes(m.name) ||
+            m.hasCarVolunteer
+        )
+      ),
+    [members, trip.cars]
+  );
+  const depositCount = useMemo(
+    () => members.filter((m) => m.paidDeposit).length,
+    [members]
+  );
+  const totalCarSeats = useMemo(
+    () => trip.cars.reduce((sum, car) => sum + car.maxSeats, 0),
+    [trip.cars]
+  );
+  const villaCapacity = trip.confirmedAccommodation?.maxGuests || 14;
 
   const handleOpenNewModal = () => {
     setEditingMember(null);
@@ -50,9 +103,8 @@ export const MembersTab: React.FC<MembersTabProps> = ({
     setStatus('confirmed');
     setRole('member');
     setPaidDeposit(true);
-    // Nobody claimed this browser yet, so the first name typed here is most
-    // likely the person holding it. Still a checkbox — they can clear it when
-    // they are adding a friend.
+    setHasCarVolunteer(false);
+    setCarSeatsOffered(4);
     setIsMe(!me);
     setIsMemberModalOpen(true);
   };
@@ -66,6 +118,8 @@ export const MembersTab: React.FC<MembersTabProps> = ({
     setStatus(m.status);
     setRole(m.role);
     setPaidDeposit(!!m.paidDeposit);
+    setHasCarVolunteer(Boolean(m.hasCarVolunteer));
+    setCarSeatsOffered(m.carSeatsOffered || 4);
     setIsMe(me?.id === m.id);
     setIsMemberModalOpen(true);
   };
@@ -75,57 +129,62 @@ export const MembersTab: React.FC<MembersTabProps> = ({
     if (!name.trim() || !nickname.trim()) return;
 
     if (editingMember) {
-      onSaveItem('members', {
+      const updated: Member = {
         ...editingMember,
-        name,
-        nickname,
-        phone,
-        promptPayId,
+        name: name.trim(),
+        nickname: nickname.trim(),
+        phone: phone.trim() || undefined,
+        promptPayId: promptPayId.trim() || undefined,
         status,
         role,
         paidDeposit,
-      });
+        hasCarVolunteer,
+        carSeatsOffered: hasCarVolunteer ? Number(carSeatsOffered) : undefined,
+      };
+
+      onSaveItem('members', updated);
 
       if (isMe) {
-        onChooseMe({ ...editingMember, nickname });
+        onChooseMe({ ...updated, nickname });
       } else if (me?.id === editingMember.id) {
         onChooseMe(null);
       }
     } else {
       const newMem: Member = {
         id: `m-${Date.now()}`,
-        name,
-        nickname,
-        phone,
-        promptPayId,
-        avatarColor: AVATAR_COLORS[trip.members.length % AVATAR_COLORS.length],
+        name: name.trim(),
+        nickname: nickname.trim(),
+        phone: phone.trim() || undefined,
+        promptPayId: promptPayId.trim() || undefined,
+        avatarColor: AVATAR_COLORS[members.length % AVATAR_COLORS.length],
         status,
         role,
         paidDeposit,
+        hasCarVolunteer,
+        carSeatsOffered: hasCarVolunteer ? Number(carSeatsOffered) : undefined,
       };
+
       onSaveItem('members', newMem);
-      // Remember it on this device so the next visit already knows the name.
       if (isMe) onChooseMe(newMem);
     }
+
     setIsMemberModalOpen(false);
   };
 
   const handleDeleteMember = (memberId: string) => {
-    const member = trip.members.find((m) => m.id === memberId);
+    const member = members.find((m) => m.id === memberId);
     if (
       !window.confirm(
-        `นำ ${member?.nickname ?? 'คนนี้'} ออกจากทริป? ชื่อจะหายจากรถและห้องนอนด้วย`
+        `นำ "${member?.nickname ?? 'คนนี้'}" ออกจากทริป? รายชื่อจะถูกนำออกจากผังรถและห้องนอนด้วย`
       )
     ) {
       return;
     }
 
     if (me?.id === memberId) onChooseMe(null);
-
     onRemoveItem('members', memberId);
 
-    // Somebody who left the trip cannot still be in a seat or a bedroom. Each
-    // car is written on its own; the villa is part of the trip itself.
+    // Remove from cars
     for (const car of trip.cars) {
       if (!car.passengerIds.includes(memberId)) continue;
       onSaveItem('cars', {
@@ -134,6 +193,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
       });
     }
 
+    // Remove from villa rooms
     const villa = trip.confirmedAccommodation;
     if (villa?.rooms.some((r) => r.guestIds.includes(memberId))) {
       onUpdateTrip((t) => ({
@@ -149,200 +209,490 @@ export const MembersTab: React.FC<MembersTabProps> = ({
     }
   };
 
-  const statusLabel: Record<Member['status'], string> = {
-    confirmed: 'ไปแน่นอน',
-    maybe: 'ขอดูก่อน',
-    declined: 'ไปไม่ได้',
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
-  const statusTone: Record<Member['status'], 'go' | 'wait' | 'off'> = {
-    confirmed: 'go',
-    maybe: 'wait',
-    declined: 'off',
-  };
+
+  const filteredMembers = useMemo(() => {
+    return members.filter((m) => {
+      // Filter tab
+      let matchTab = true;
+      if (activeFilter === 'confirmed') matchTab = m.status === 'confirmed';
+      else if (activeFilter === 'drivers')
+        matchTab = trip.cars.some(
+          (c) =>
+            c.driverName.includes(m.nickname) ||
+            c.driverName.includes(m.name) ||
+            m.hasCarVolunteer
+        );
+      else if (activeFilter === 'organizer') matchTab = m.role === 'organizer';
+      else if (activeFilter === 'unassigned') {
+        const hasCar = trip.cars.some((c) => c.passengerIds.includes(m.id));
+        const hasRoom = trip.confirmedAccommodation?.rooms.some((r) =>
+          r.guestIds.includes(m.id)
+        );
+        matchTab = !hasCar || !hasRoom;
+      }
+
+      // Search query
+      const matchSearch =
+        !searchQuery.trim() ||
+        m.nickname.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (m.phone && m.phone.includes(searchQuery)) ||
+        (m.promptPayId && m.promptPayId.includes(searchQuery));
+
+      return matchTab && matchSearch;
+    });
+  }, [members, activeFilter, searchQuery, trip.cars, trip.confirmedAccommodation]);
 
   return (
-    <div className="pb-16">
-      <PageHead
-        title="เพื่อนร่วมทริป"
-        note="ใครไปแน่ ใครขอดูก่อน ใครโอนมัดจำแล้ว รวมถึงรถและห้องนอนที่แต่ละคนได้"
-        aside={
-          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2">
-            <Tag tone="go">ไปแน่ {confirmedCount} คน</Tag>
-            <Tag tone="wait">ขอดูก่อน {maybeCount} คน</Tag>
-            <Tag tone="off">โอนมัดจำแล้ว {depositCount} คน</Tag>
+    <div className="pb-20 max-w-5xl mx-auto space-y-6">
+      {/* Editorial Page Head */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div>
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-surface text-[11px] font-medium text-ink tracking-wide uppercase mb-2">
+            <Users className="w-3.5 h-3.5 text-brass" />
+            <span>メンバーリスト · GANG ROSTER & DIRECTORY</span>
           </div>
-        }
-        action={
-          <button onClick={handleOpenNewModal} className={btnSolid}>
-            เพิ่มเพื่อน
-          </button>
-        }
-      />
+          <h1 className="font-display text-display text-ink leading-tight">
+            เพื่อนร่วมทริป ({members.length} คน)
+          </h1>
+          <p className="mt-1 text-body text-stone">
+            ทำเนียบเพื่อนร่วมทริป ติดตามความพร้อม จัดสรรที่นั่งรถ ห้องนอน และช่องทางติดต่อ
+          </p>
+        </div>
 
-      {trip.members.length === 0 ? (
+        <div className="shrink-0 flex items-center gap-2.5">
+          <button
+            onClick={handleOpenNewModal}
+            className={`${btnSolid} flex items-center gap-2 shadow-sm`}
+          >
+            <Plus className="w-4 h-4" />
+            <span>เพิ่มเพื่อนร่วมทริป</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Gang Roster Bento (4 Cards) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">
+        {/* Card 1: Confirmed Members */}
+        <div className="bg-paper rounded-panel p-5 border border-mist-deep shadow-sm flex flex-col justify-between">
+          <div>
+            <span className="text-fine font-medium text-stone flex items-center gap-1.5">
+              <UserCheck className="w-4 h-4 text-moss" />
+              สมาชิกยืนยันไปแน่นอน
+            </span>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="font-display text-display sm:text-[2.5rem] leading-none font-semibold text-ink tabular-nums">
+                {confirmedMembers.length}
+              </span>
+              <span className="text-fine text-stone">/ 10–12 คน</span>
+            </div>
+          </div>
+          <p className="mt-3 text-[11px] text-stone">
+            ครบตามเป้าหมายขนาดวิลล่า
+          </p>
+        </div>
+
+        {/* Card 2: Car Seats Capacity */}
+        <div className="bg-paper rounded-panel p-5 border border-mist-deep shadow-sm flex flex-col justify-between">
+          <div>
+            <span className="text-fine font-medium text-stone flex items-center gap-1.5">
+              <Car className="w-4 h-4 text-brass" />
+              ที่นั่งรถทั้งหมด
+            </span>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="font-display text-display sm:text-[2.5rem] leading-none font-semibold text-ink tabular-nums">
+                {totalCarSeats}
+              </span>
+              <span className="text-fine text-stone">ที่นั่ง ({trip.cars.length} คัน)</span>
+            </div>
+          </div>
+          <p className="mt-3 text-[11px] text-[#244b36] font-medium">
+            เพียงพอสำหรับทุกคน (สำรอง {Math.max(0, totalCarSeats - confirmedMembers.length)} ที่)
+          </p>
+        </div>
+
+        {/* Card 3: Villa Beds Capacity */}
+        <div className="bg-paper rounded-panel p-5 border border-mist-deep shadow-sm flex flex-col justify-between">
+          <div>
+            <span className="text-fine font-medium text-stone flex items-center gap-1.5">
+              <Home className="w-4 h-4 text-brass" />
+              เตียงนอนพูลวิลล่า
+            </span>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="font-display text-display sm:text-[2.5rem] leading-none font-semibold text-ink tabular-nums">
+                {confirmedMembers.length}
+              </span>
+              <span className="text-fine text-stone">/ {villaCapacity} คน</span>
+            </div>
+          </div>
+          <p className="mt-3 text-[11px] text-stone">
+            Harper Villa 4 ห้องนอน 4 ห้องน้ำ
+          </p>
+        </div>
+
+        {/* Card 4: Deposit Status */}
+        <div className="bg-paper rounded-panel p-5 border border-mist-deep shadow-sm flex flex-col justify-between">
+          <div>
+            <span className="text-fine font-medium text-stone flex items-center gap-1.5">
+              <CheckCircle2 className="w-4 h-4 text-moss" />
+              สถานะโอนมัดจำ
+            </span>
+            <div className="mt-2 flex items-baseline gap-2">
+              <span className="font-display text-display sm:text-[2.5rem] leading-none font-semibold text-ink tabular-nums">
+                {depositCount}
+              </span>
+              <span className="text-fine text-stone">/ {members.length} คน</span>
+            </div>
+          </div>
+          <p className="mt-3 text-[11px] text-[#244b36] font-medium">
+            {depositCount === members.length ? 'โอนครบทุกคนแล้ว 100%' : `รอโอนอีก ${members.length - depositCount} คน`}
+          </p>
+        </div>
+      </div>
+
+      {/* Search & Filter Pills */}
+      <div className="bg-paper rounded-panel p-4 sm:p-5 border border-mist-deep shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Search Box */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone/70 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="ค้นหาชื่อเล่น, ชื่อจริง, หรือเบอร์โทร…"
+              className="w-full pl-9 pr-3.5 py-2 text-fine rounded-ctl bg-surface/80 border border-transparent focus:outline-none focus:border-ink/40 focus:bg-paper transition-colors"
+            />
+          </div>
+
+          {/* Identity Quick Status */}
+          {me ? (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-ctl bg-surface text-fine text-ink">
+              <span
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: me.avatarColor }}
+              />
+              <span>เครื่องนี้จำคุณเป็น: <strong className="font-semibold">{me.nickname}</strong></span>
+              <button
+                onClick={() => onChooseMe(null)}
+                className="text-[11px] text-stone hover:text-ink ml-1 underline cursor-pointer"
+              >
+                สลับชื่อ
+              </button>
+            </div>
+          ) : (
+            <span className="text-fine text-stone">
+              กด "นี่คือฉัน" ที่การ์ดของคุณ เพื่อจำอุปกรณ์นี้
+            </span>
+          )}
+        </div>
+
+        {/* Filter Pills */}
+        <div className="mt-4 pt-3 border-t border-mist-deep flex flex-wrap items-center gap-2">
+          {[
+            { id: 'all' as const, label: 'ทั้งหมด', count: members.length },
+            { id: 'confirmed' as const, label: 'ไปแน่นอน', count: confirmedMembers.length },
+            { id: 'drivers' as const, label: 'คนขับอาสา', count: driverMembers.length },
+            {
+              id: 'organizer' as const,
+              label: 'ผู้จัดทริป',
+              count: members.filter((m) => m.role === 'organizer').length,
+            },
+            {
+              id: 'unassigned' as const,
+              label: 'ยังไม่ระบุรถ/ห้อง',
+              count: members.filter(
+                (m) =>
+                  !trip.cars.some((c) => c.passengerIds.includes(m.id)) ||
+                  !trip.confirmedAccommodation?.rooms.some((r) => r.guestIds.includes(m.id))
+              ).length,
+            },
+          ].map((pill) => (
+            <button
+              key={pill.id}
+              onClick={() => setActiveFilter(pill.id)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-fine font-medium transition-colors cursor-pointer ${
+                activeFilter === pill.id
+                  ? 'bg-ink text-paper'
+                  : 'bg-surface text-stone hover:text-ink'
+              }`}
+            >
+              <span>{pill.label}</span>
+              <span className="font-mono tabular-nums opacity-80">({pill.count})</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Gang Roster Cards Grid */}
+      {filteredMembers.length === 0 ? (
         <Panel>
           <Empty
-            title="ยังไม่มีใครลงชื่อ"
-            note="เพิ่มชื่อคนแรกเอง หรือส่งลิงก์เว็บนี้ให้เพื่อนกรอกกันเข้ามา"
-            action={
-              <button onClick={handleOpenNewModal} className={btnLink}>
-                <Plus className="w-3.5 h-3.5" />
-                ลงชื่อคนแรก
-              </button>
-            }
+            title="ไม่พบรายชื่อเพื่อนที่ค้นหา"
+            note="ลองพิมพ์ด้วยคำอื่น หรือกดล้างการค้นหา"
           />
         </Panel>
       ) : (
-        <ul className="bg-paper rounded-panel overflow-hidden divide-y divide-mist-deep/70">
-          {trip.members.map((member) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          {filteredMembers.map((member) => {
             const memberCar = trip.cars.find((c) => c.passengerIds.includes(member.id));
+            const isDriver = trip.cars.some(
+              (c) =>
+                c.driverName.includes(member.nickname) ||
+                c.driverName.includes(member.name)
+            );
             const memberRoom = trip.confirmedAccommodation?.rooms.find((r) =>
               r.guestIds.includes(member.id)
             );
+            const isMeMember = me?.id === member.id;
 
             return (
-              <li
+              <div
                 key={member.id}
-                className="px-6 sm:px-8 py-5 flex items-start gap-4 sm:gap-6"
+                className={`bg-paper rounded-panel p-5 border shadow-xs transition-all flex flex-col justify-between ${
+                  isMeMember
+                    ? 'border-brass bg-[#fffdfa]'
+                    : 'border-mist-deep hover:border-ink/20'
+                }`}
               >
-                <span
-                  className="w-10 h-10 shrink-0 rounded-ctl flex items-center justify-center text-paper text-fine"
-                  style={{ backgroundColor: member.avatarColor }}
-                  aria-hidden="true"
-                >
-                  {member.nickname.slice(0, 2)}
-                </span>
+                <div>
+                  {/* Top Bar: Avatar, Names, Role */}
+                  <div className="flex items-start justify-between gap-3 pb-3.5 border-b border-mist-deep">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-paper font-semibold text-body shrink-0 shadow-xs"
+                        style={{ backgroundColor: member.avatarColor }}
+                      >
+                        {initialOf(member.nickname)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-display text-lead font-semibold text-ink truncate">
+                            {member.nickname}
+                          </h3>
+                          {member.role === 'organizer' && (
+                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.2 rounded-full bg-brass/20 text-brass font-medium">
+                              <Crown className="w-3 h-3" />
+                              ผู้จัดทริป
+                            </span>
+                          )}
+                          {isDriver && (
+                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.2 rounded-full bg-[#eaf1ec] text-[#244b36] font-medium">
+                              <Car className="w-3 h-3" />
+                              คนขับรถ
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-fine text-stone truncate mt-0.5">
+                          {member.name}
+                        </p>
+                      </div>
+                    </div>
 
-                <div className="flex-1 min-w-0">
-                  <p className="text-body text-ink">
-                    {member.nickname}
-                    <span className="ml-2 text-fine text-stone">{member.name}</span>
-                    {member.role === 'organizer' && (
-                      <span className="ml-2 text-fine text-brass">ผู้จัด</span>
+                    {/* Claim identity button */}
+                    {isMeMember ? (
+                      <span className="text-[11px] px-2 py-0.5 rounded-full bg-brass text-paper font-medium shrink-0">
+                        นี่คือคุณ
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => onChooseMe(member)}
+                        className="text-[11px] text-stone hover:text-brass transition-colors shrink-0 underline cursor-pointer"
+                        title="คลิกเพื่อจำว่าเครื่องนี้คือคุณ"
+                      >
+                        นี่คือฉัน
+                      </button>
                     )}
-                  </p>
-
-                  <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5">
-                    <Tag tone={statusTone[member.status]}>{statusLabel[member.status]}</Tag>
-                    <Tag tone={member.paidDeposit ? 'go' : 'off'}>
-                      {member.paidDeposit ? 'โอนมัดจำแล้ว' : 'ยังไม่โอนมัดจำ'}
-                    </Tag>
-                    <Tag tone={member.promptPayId || member.phone ? 'go' : 'wait'}>
-                      {member.promptPayId || member.phone
-                        ? 'รับโอนพร้อมเพย์ได้'
-                        : 'ยังไม่มีเลขพร้อมเพย์'}
-                    </Tag>
                   </div>
 
-                  <p className="mt-2 text-fine text-stone">
-                    {memberCar ? memberCar.driverName : 'ยังไม่ได้เลือกรถ'}
-                    {' · '}
-                    {memberRoom ? memberRoom.roomName.split(':')[0] : 'ยังไม่มีห้องนอน'}
-                  </p>
+                  {/* Logistics Connectivity Tags */}
+                  <div className="mt-3.5 space-y-2 text-fine">
+                    {/* Car */}
+                    <div className="flex items-center justify-between text-stone">
+                      <span className="flex items-center gap-1.5">
+                        <Car className="w-3.5 h-3.5 text-brass" />
+                        <span>รถที่นั่ง:</span>
+                      </span>
+                      <span className="font-medium text-ink truncate max-w-[13rem]">
+                        {memberCar ? (
+                          memberCar.carModel
+                        ) : isDriver ? (
+                          'คนขับประจำรถ'
+                        ) : (
+                          <span className="text-[#934426] font-normal">ยังไม่ได้เลือกรถ</span>
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Bedroom */}
+                    <div className="flex items-center justify-between text-stone">
+                      <span className="flex items-center gap-1.5">
+                        <Home className="w-3.5 h-3.5 text-brass" />
+                        <span>ห้องนอน:</span>
+                      </span>
+                      <span className="font-medium text-ink truncate max-w-[13rem]">
+                        {memberRoom ? (
+                          memberRoom.roomName.split(':')[0]
+                        ) : (
+                          <span className="text-[#934426] font-normal">ยังไม่มีห้องนอน</span>
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Deposit & PromptPay */}
+                    <div className="flex items-center justify-between text-stone">
+                      <span className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-moss" />
+                        <span>มัดจำ & พร้อมเพย์:</span>
+                      </span>
+                      <span className="text-fine">
+                        {member.paidDeposit ? (
+                          <span className="text-[#244b36] font-medium">โอนมัดจำแล้ว</span>
+                        ) : (
+                          <span className="text-[#934426]">ยังไม่โอนมัดจำ</span>
+                        )}
+                        {member.promptPayId || member.phone ? (
+                          <span className="text-stone"> · มีพร้อมเพย์</span>
+                        ) : (
+                          <span className="text-stone/60"> · ไม่มีพร้อมเพย์</span>
+                        )}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-4 shrink-0">
-                  {me?.id === member.id ? (
-                    <span className="text-fine text-brass">นี่คือคุณ</span>
-                  ) : (
+                {/* Quick Action Footer */}
+                <div className="mt-4 pt-3 border-t border-mist-deep flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {member.phone && (
+                      <a
+                        href={`tel:${member.phone}`}
+                        className="inline-flex items-center gap-1 text-[11px] text-ink hover:text-brass transition-colors"
+                      >
+                        <Phone className="w-3.5 h-3.5" />
+                        <span>{member.phone}</span>
+                      </a>
+                    )}
+
+                    {(member.promptPayId || member.phone) && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          copyToClipboard(
+                            member.promptPayId || member.phone || '',
+                            member.id
+                          )
+                        }
+                        className="inline-flex items-center gap-1 text-[11px] text-stone hover:text-ink transition-colors cursor-pointer"
+                        title="คัดลอกเลขพร้อมเพย์"
+                      >
+                        {copiedId === member.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-moss" />
+                            <span className="text-moss">คัดลอกแล้ว</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>คัดลอกพร้อมเพย์</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1">
                     <button
-                      onClick={() => onChooseMe(member)}
-                      className="text-fine text-stone hover:text-ink transition-colors"
-                      title={`จำไว้ว่าเครื่องนี้คือ ${member.nickname}`}
+                      type="button"
+                      onClick={() => handleOpenEditModal(member)}
+                      className="p-1.5 text-stone hover:text-ink hover:bg-surface rounded transition-colors"
+                      title="แก้ไขข้อมูลเพื่อน"
                     >
-                      นี่คือฉัน
+                      <Pencil className="w-4 h-4" />
                     </button>
-                  )}
-                  {member.phone && (
-                    <a
-                      href={`tel:${member.phone}`}
-                      className="text-stone hover:text-ink transition-colors"
-                      title={`โทรหา ${member.nickname} ${member.phone}`}
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteMember(member.id)}
+                      className="p-1.5 text-stone hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                      title="ลบออกจากทริป"
                     >
-                      <Phone className="w-4 h-4" />
-                    </a>
-                  )}
-                  <button
-                    onClick={() => handleOpenEditModal(member)}
-                    className="text-stone hover:text-ink transition-colors"
-                    aria-label={`แก้ไขข้อมูล ${member.nickname}`}
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteMember(member.id)}
-                    className="text-stone hover:text-ink transition-colors"
-                    aria-label={`นำ ${member.nickname} ออกจากทริป`}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </li>
+              </div>
             );
           })}
-        </ul>
+        </div>
       )}
 
+      {/* ADD / EDIT MEMBER MODAL */}
       {isMemberModalOpen && (
         <Modal
-          title={editingMember ? 'แก้ไขข้อมูลเพื่อน' : 'เพิ่มเพื่อนร่วมทริป'}
+          title={editingMember ? 'แก้ไขข้อมูลเพื่อนร่วมทริป' : 'เพิ่มเพื่อนร่วมทริป'}
+          note="กรอกชื่อ เบอร์โทร และระบุว่าอาสาขับรถหรือไม่"
           onClose={() => setIsMemberModalOpen(false)}
         >
-          <form onSubmit={handleSaveMember} className="space-y-5">
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="ชื่อเล่น" htmlFor="mem-nick">
-                <input
-                  id="mem-nick"
-                  type="text"
-                  required
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                  placeholder="นัท โอม"
-                  className={input}
-                />
-              </Field>
-              <Field label="ชื่อจริง" htmlFor="mem-name">
-                <input
-                  id="mem-name"
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="ณัฐชา วิเศษ"
-                  className={input}
-                />
-              </Field>
-            </div>
+          <form onSubmit={handleSaveMember} className="space-y-4">
+            <Field label="ชื่อเล่น" htmlFor="mem-nickname">
+              <input
+                id="mem-nickname"
+                type="text"
+                required
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="เช่น โอม, แปม, กวาง"
+                className={input}
+              />
+            </Field>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="เบอร์โทร" htmlFor="mem-phone">
+            <Field label="ชื่อจริง (หรือนามสกุล)" htmlFor="mem-name">
+              <input
+                id="mem-name"
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="เช่น ธนกร หรือ โอม มิตรสหาย"
+                className={input}
+              />
+            </Field>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <Field label="เบอร์โทรศัพท์" htmlFor="mem-phone">
                 <input
                   id="mem-phone"
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="081-234-5678"
+                  placeholder="0812345678"
                   className={input}
                 />
               </Field>
+
               <Field
-                label="พร้อมเพย์"
+                label="เลขพร้อมเพย์"
                 htmlFor="mem-promptpay"
-                hint="เว้นว่างได้ จะใช้เบอร์โทรแทน"
+                hint="เบอร์โทรหรือเลขบัตร ปชช. สำหรับรับเงินโอนคืน"
               >
                 <input
                   id="mem-promptpay"
-                  type="tel"
+                  type="text"
                   value={promptPayId}
                   onChange={(e) => setPromptPayId(e.target.value)}
-                  placeholder="เบอร์ 10 หลัก หรือบัตร 13 หลัก"
+                  placeholder="0812345678"
                   className={input}
                 />
               </Field>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="ไปไหม" htmlFor="mem-status">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <Field label="สถานะการเข้าร่วม" htmlFor="mem-status">
                 <select
                   id="mem-status"
                   value={status}
@@ -351,54 +701,58 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                 >
                   <option value="confirmed">ไปแน่นอน</option>
                   <option value="maybe">ขอดูก่อน</option>
-                  <option value="declined">ติดธุระ ไปไม่ได้</option>
+                  <option value="declined">ไปไม่ได้</option>
                 </select>
               </Field>
-              <Field label="บทบาท" htmlFor="mem-role">
+
+              <Field label="บทบาทในทริป" htmlFor="mem-role">
                 <select
                   id="mem-role"
                   value={role}
                   onChange={(e) => setRole(e.target.value as Member['role'])}
                   className={input}
                 >
-                  <option value="member">สมาชิก</option>
+                  <option value="member">สมาชิกทั่วไป</option>
                   <option value="organizer">ผู้จัดทริป</option>
                 </select>
               </Field>
             </div>
 
-            <div className="border-t border-mist-deep pt-5 space-y-3">
-              <div className="flex items-center gap-2.5">
+            {/* Checkboxes */}
+            <div className="pt-3 border-t border-mist-deep space-y-2.5">
+              <label className="flex items-center gap-2.5 text-fine text-ink cursor-pointer">
                 <input
                   type="checkbox"
-                  id="mem-is-me"
+                  checked={paidDeposit}
+                  onChange={(e) => setPaidDeposit(e.target.checked)}
+                  className="w-4 h-4 accent-brass"
+                />
+                <span>โอนเงินมัดจำที่พักเรียบร้อยแล้ว</span>
+              </label>
+
+              <label className="flex items-center gap-2.5 text-fine text-ink cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={hasCarVolunteer}
+                  onChange={(e) => setHasCarVolunteer(e.target.checked)}
+                  className="w-4 h-4 accent-brass"
+                />
+                <span>อาสาขับรถนำเที่ยว (มีรถส่วนตัวร่วมเดินทาง)</span>
+              </label>
+
+              <label className="flex items-center gap-2.5 text-fine text-ink cursor-pointer">
+                <input
+                  type="checkbox"
                   checked={isMe}
                   onChange={(e) => setIsMe(e.target.checked)}
                   className="w-4 h-4 accent-brass"
                 />
-                <label htmlFor="mem-is-me" className="text-body text-ink cursor-pointer">
-                  นี่คือฉัน จำไว้ในเครื่องนี้
-                </label>
-              </div>
-              <p className="text-fine text-stone">
-                เปิดไว้แล้วครั้งหน้าที่เปิดจากเครื่องนี้จะเป็นชื่อนี้เลย ไม่ต้องเลือกใหม่
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2.5">
-              <input
-                type="checkbox"
-                id="paidDeposit"
-                checked={paidDeposit}
-                onChange={(e) => setPaidDeposit(e.target.checked)}
-                className="w-4 h-4 accent-brass"
-              />
-              <label htmlFor="paidDeposit" className="text-body text-ink cursor-pointer">
-                โอนค่ามัดจำที่พักแล้ว
+                <span>นี่คือฉัน (บันทึกจำเบราว์เซอร์นี้)</span>
               </label>
             </div>
 
-            <div className="flex gap-3">
+            {/* Actions */}
+            <div className="flex gap-3 pt-4">
               <button
                 type="button"
                 onClick={() => setIsMemberModalOpen(false)}
@@ -407,7 +761,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({
                 ยกเลิก
               </button>
               <button type="submit" className={`flex-1 ${btnSolid}`}>
-                บันทึก
+                {editingMember ? 'บันทึกการแก้ไข' : 'เพิ่มเพื่อน'}
               </button>
             </div>
           </form>
@@ -416,3 +770,5 @@ export const MembersTab: React.FC<MembersTabProps> = ({
     </div>
   );
 };
+
+export default MembersTab;

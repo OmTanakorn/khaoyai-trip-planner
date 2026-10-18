@@ -81,10 +81,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     },
   ];
 
-  // Detect which category is currently active
-  const activeCategory =
-    navCategories.find((cat) => cat.items.some((item) => item.id === activeTab)) ||
-    navCategories[0];
 
   return (
     <header className="sticky top-0 z-40 bg-mist/90 backdrop-blur-md" data-print="hide">
@@ -183,48 +179,27 @@ export const Navbar: React.FC<NavbarProps> = ({
           ))}
         </nav>
 
-        {/* Mobile: pick a group, then a page within it */}
-        <div className="sm:hidden pb-2.5 space-y-2">
-          <div className="flex items-center gap-1 p-0.5 bg-surface rounded-ctl">
-            {navCategories.map((cat) => {
-              const isCatActive = activeCategory.id === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveTab(cat.items[0].id)}
-                  className={`flex-1 text-fine py-1.5 rounded-[6px] whitespace-nowrap transition-colors ${
-                    isCatActive ? 'bg-paper text-ink font-medium' : 'text-stone'
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center gap-4 overflow-x-auto no-scrollbar px-1">
-            {activeCategory.items.map((item) => {
+        {/* Mobile: direct, 1-tap horizontal scroll navigation */}
+        <div className="sm:hidden pb-2.5 -mx-4 px-4 overflow-x-auto no-scrollbar flex items-center gap-1.5">
+          {navCategories
+            .flatMap((cat) => cat.items)
+            .map((item) => {
               const isActive = activeTab === item.id;
               return (
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`relative py-1.5 text-body whitespace-nowrap transition-colors ${
-                    isActive ? 'text-ink font-medium' : 'text-stone'
+                  className={`px-3 py-1.5 rounded-full text-fine whitespace-nowrap transition-colors shrink-0 cursor-pointer ${
+                    isActive
+                      ? 'bg-ink text-paper font-medium'
+                      : 'bg-surface/80 text-stone hover:text-ink hover:bg-mist-deep/60'
                   }`}
                 >
                   {item.label}
-                  <span
-                    className={`absolute left-0 right-0 bottom-0 h-0.5 rounded-full ${
-                      isActive ? 'bg-ink' : 'bg-transparent'
-                    }`}
-                    aria-hidden="true"
-                  />
                 </button>
               );
             })}
-          </div>
         </div>
       </div>
       <div className="h-px bg-mist-deep/70" aria-hidden="true" />
