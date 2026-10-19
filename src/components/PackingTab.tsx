@@ -5,61 +5,56 @@ import {
   Trash2,
   Pencil,
   Backpack,
-  Sparkles,
-  Users,
-  Flame,
-  ShieldCheck,
   UtensilsCrossed,
   Search,
   CheckCircle2,
   AlertCircle,
   Tag,
   User,
-  Coffee,
-  Waves,
+  ExternalLink,
+  Upload,
+  X,
+  Eye,
+  ShoppingBag,
 } from 'lucide-react';
 import { TripData, PackingItem, Member, TripListEditor } from '../types/trip';
 import { TripUpdate } from '../services/storage';
 import { PageHead, Panel, Modal, Field, Empty, Meter } from './ui';
 import { input, btnSolid, btnQuiet, btnBrass, btnLink, initialOf } from './ui-kit';
 
+function compressImageFile(file: File, maxWidth = 800, quality = 0.75): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return resolve(e.target?.result as string);
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 interface PackingTabProps extends TripListEditor {
   trip: TripData;
   onUpdateTrip: (update: TripUpdate) => void;
   me: Member | null;
 }
-
-interface PackingPreset {
-  title: string;
-  category: 'shared' | 'personal';
-  subCategory: string;
-  icon: React.ComponentType<{ className?: string }>;
-}
-
-const PACKING_PRESETS: PackingPreset[] = [
-  // Personal & Pool
-  { title: 'ชุดว่ายน้ำ / กางเกงว่ายน้ำ (สำหรับสระน้ำเกลือ)', category: 'personal', subCategory: 'ว่ายน้ำ & พักผ่อน', icon: Waves },
-  { title: 'แว่นกันแดด & ครีมกันแดด SPF50+', category: 'personal', subCategory: 'ว่ายน้ำ & พักผ่อน', icon: Waves },
-  { title: 'เสื้อกันหนาวบาง / เสื้อคลุม (ลมหนาวเขาใหญ่ปลาย ต.ค.)', category: 'personal', subCategory: 'เสื้อผ้า', icon: Backpack },
-  { title: 'สเปรย์กันยุง & แมลงกลางแจ้ง', category: 'personal', subCategory: 'ของใช้ส่วนตัว', icon: ShieldCheck },
-  { title: 'ยารักษาโรคประจำตัว', category: 'personal', subCategory: 'สุขภาพ', icon: ShieldCheck },
-  { title: 'สายชาร์จ & แบตเตอรี่สำรอง (Power Bank)', category: 'personal', subCategory: 'อุปกรณ์ไอที', icon: Backpack },
-
-  // Villa Shared Living
-  { title: 'ปลั๊กพ่วง 3 ตา สายยาว (สำหรับห้องนั่งเล่น & ริมสระ)', category: 'shared', subCategory: 'กองกลางวิลล่า', icon: Sparkles },
-  { title: 'ลำโพงบลูทูธพกพาสำรอง (ริมสระว่ายน้ำ)', category: 'shared', subCategory: 'กองกลางวิลล่า', icon: Sparkles },
-  { title: 'บอร์ดเกม & ไพ่สังสรรค์ยามดึก', category: 'shared', subCategory: 'กองกลางวิลล่า', icon: Sparkles },
-  { title: 'ยาสามัญประจำบ้าน (พารา, ยาแก้แพ้, ยาแก้ท้องเสีย)', category: 'shared', subCategory: 'สุขภาพกองกลาง', icon: ShieldCheck },
-  { title: 'กระดาษทิชชู่เปียก & ทิชชู่แห้งม้วนใหญ่', category: 'shared', subCategory: 'ของใช้ในบ้าน', icon: Sparkles },
-  { title: 'ถุงขยะดำใบใหญ่สำหรับเก็บกวาดวิลล่า', category: 'shared', subCategory: 'ของใช้ในบ้าน', icon: Sparkles },
-
-  // Kitchen & BBQ
-  { title: 'น้ำจิ้มสุกี้ & น้ำจิ้มซีฟู้ดขวดใหญ่', category: 'shared', subCategory: 'ครัว & BBQ', icon: Flame },
-  { title: 'ฟอยล์อะลูมิเนียมย่างเนื้อ & เนยสด', category: 'shared', subCategory: 'ครัว & BBQ', icon: Flame },
-  { title: 'ที่คีบเนื้อ BBQ & ถุงมือพลาสติกทำอาหาร', category: 'shared', subCategory: 'ครัว & BBQ', icon: Flame },
-  { title: 'ถ่านปิ้งย่างสำรอง & ปืนยิงแก๊ส', category: 'shared', subCategory: 'ครัว & BBQ', icon: Flame },
-  { title: 'แก้วเก็บความเย็นส่วนตัว (ลดขยะแก้วพลาสติก)', category: 'personal', subCategory: 'เครื่องดื่ม', icon: Coffee },
-];
 
 export const PackingTab: React.FC<PackingTabProps> = ({
   trip,
@@ -78,6 +73,10 @@ export const PackingTab: React.FC<PackingTabProps> = ({
   const [itemTitle, setItemTitle] = useState('');
   const [itemCategory, setItemCategory] = useState<'shared' | 'personal'>('shared');
   const [itemAssignedMemberId, setItemAssignedMemberId] = useState('');
+  const [itemImageUrl, setItemImageUrl] = useState('');
+  const [itemMakroUrl, setItemMakroUrl] = useState('');
+  const [itemNotes, setItemNotes] = useState('');
+  const [previewImageModalUrl, setPreviewImageModalUrl] = useState<string | null>(null);
 
   const packingList = useMemo(() => trip.packingList ?? [], [trip.packingList]);
   const sharedItems = useMemo(
@@ -132,11 +131,14 @@ export const PackingTab: React.FC<PackingTabProps> = ({
     handleAssignMember(itemId, me.id);
   };
 
-  const handleOpenAddModal = (presetTitle?: string, presetCategory?: 'shared' | 'personal') => {
+  const handleOpenAddModal = () => {
     setEditingItem(null);
-    setItemTitle(presetTitle || '');
-    setItemCategory(presetCategory || 'shared');
-    setItemAssignedMemberId(presetCategory === 'shared' ? me?.id || '' : '');
+    setItemTitle('');
+    setItemCategory('shared');
+    setItemAssignedMemberId(me?.id || '');
+    setItemImageUrl('');
+    setItemMakroUrl('');
+    setItemNotes('');
     setIsModalOpen(true);
   };
 
@@ -145,6 +147,9 @@ export const PackingTab: React.FC<PackingTabProps> = ({
     setItemTitle(item.title);
     setItemCategory(item.category);
     setItemAssignedMemberId(item.assignedMemberId || '');
+    setItemImageUrl(item.imageUrl || '');
+    setItemMakroUrl(item.makroUrl || '');
+    setItemNotes(item.notes || '');
     setIsModalOpen(true);
   };
 
@@ -152,22 +157,26 @@ export const PackingTab: React.FC<PackingTabProps> = ({
     e.preventDefault();
     if (!itemTitle.trim()) return;
 
+    const fields = {
+      title: itemTitle.trim(),
+      category: itemCategory,
+      assignedMemberId:
+        itemCategory === 'shared' && itemAssignedMemberId ? itemAssignedMemberId : undefined,
+      imageUrl: itemImageUrl.trim() || undefined,
+      makroUrl: itemMakroUrl.trim() || undefined,
+      notes: itemNotes.trim() || undefined,
+    };
+
     if (editingItem) {
       onSaveItem('packingList', {
         ...editingItem,
-        title: itemTitle.trim(),
-        category: itemCategory,
-        assignedMemberId:
-          itemCategory === 'shared' && itemAssignedMemberId ? itemAssignedMemberId : undefined,
+        ...fields,
       });
     } else {
       const newItem: PackingItem = {
         id: `p-${Date.now()}`,
-        title: itemTitle.trim(),
-        category: itemCategory,
-        assignedMemberId:
-          itemCategory === 'shared' && itemAssignedMemberId ? itemAssignedMemberId : undefined,
         isPacked: false,
+        ...fields,
       };
       onSaveItem('packingList', newItem);
     }
@@ -178,29 +187,6 @@ export const PackingTab: React.FC<PackingTabProps> = ({
     const item = packingList.find((i) => i.id === itemId);
     if (!window.confirm(`ลบรายการ "${item?.title ?? 'นี้'}" ออกจากรายการเตรียม?`)) return;
     onRemoveItem('packingList', itemId);
-  };
-
-  const handleLoadAllPresets = () => {
-    const existingTitles = new Set(packingList.map((i) => i.title.toLowerCase().trim()));
-    const itemsToAdd = PACKING_PRESETS.filter(
-      (preset) => !existingTitles.has(preset.title.toLowerCase().trim())
-    );
-
-    if (itemsToAdd.length === 0) {
-      alert('มีรายการแนะนำเหล่านี้อยู่ในเช็กลิสต์แล้ว');
-      return;
-    }
-
-    itemsToAdd.forEach((preset, idx) => {
-      const newItem: PackingItem = {
-        id: `p-${Date.now()}-${idx}`,
-        title: preset.title,
-        category: preset.category,
-        assignedMemberId: undefined,
-        isPacked: false,
-      };
-      onSaveItem('packingList', newItem);
-    });
   };
 
   const menuTitleOf = (menuId?: string) =>
@@ -386,16 +372,6 @@ export const PackingTab: React.FC<PackingTabProps> = ({
               className="w-full pl-9 pr-3.5 py-2 text-fine rounded-ctl bg-surface/80 border border-transparent focus:outline-none focus:border-ink/40 focus:bg-paper transition-colors"
             />
           </div>
-
-          {/* Quick Preset Action Button */}
-          <button
-            type="button"
-            onClick={handleLoadAllPresets}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-ctl bg-brass/15 text-brass hover:bg-brass hover:text-paper text-fine font-medium transition-colors cursor-pointer self-start sm:self-auto shrink-0"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>โหลดรายการแนะนำสำหรับพูลวิลล่า</span>
-          </button>
         </div>
 
         {/* Filter Pills */}
@@ -426,52 +402,6 @@ export const PackingTab: React.FC<PackingTabProps> = ({
         </div>
       </div>
 
-      {/* Suggested Quick Presets Drawer (Show if empty or as helpful shortcuts) */}
-      {packingList.length === 0 && (
-        <div className="bg-paper rounded-panel p-5 border border-dashed border-brass/50 bg-[#fffdfa] mb-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
-            <div className="flex items-center gap-2 text-fine text-brass font-medium">
-              <Sparkles className="w-4 h-4 text-brass shrink-0" />
-              <span>รายการของแนะนำประจำทริป Harper Pool Villa (คลิกเพื่อเพิ่มทันที)</span>
-            </div>
-            <button
-              type="button"
-              onClick={handleLoadAllPresets}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brass text-paper text-fine font-medium hover:bg-brass/90 transition-colors cursor-pointer self-start sm:self-auto"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>โหลดครบทั้งหมด 17 รายการ</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-            {PACKING_PRESETS.slice(0, 6).map((preset, idx) => {
-              const Icon = preset.icon;
-              return (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => handleOpenAddModal(preset.title, preset.category)}
-                  className="flex items-start gap-2.5 p-3 rounded-ctl bg-paper border border-mist-deep hover:border-brass/70 text-left transition-colors group cursor-pointer"
-                >
-                  <div className="p-1.5 rounded-md bg-surface text-brass shrink-0 mt-0.5">
-                    <Icon className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-fine font-medium text-ink group-hover:text-brass transition-colors truncate">
-                      {preset.title}
-                    </p>
-                    <span className="text-[11px] text-stone">
-                      {preset.category === 'shared' ? 'ของกองกลาง' : 'ของส่วนตัว'} · {preset.subCategory}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Main Checklist Items Container */}
       <div className="bg-paper rounded-panel border border-mist-deep shadow-sm overflow-hidden">
         {filteredItems.length === 0 ? (
@@ -481,7 +411,7 @@ export const PackingTab: React.FC<PackingTabProps> = ({
               note={
                 searchQuery
                   ? 'ลองค้นหาด้วยคำอื่น หรือกดล้างการค้นหา'
-                  : 'กดเพิ่มรายการใหม่ หรือกดโหลดรายการแนะนำประจำทริปด้านบน'
+                  : 'กดเพิ่มรายการใหม่เพื่อเริ่มจัดเตรียมของ'
               }
               action={
                 <button onClick={() => handleOpenAddModal()} className={btnSolid}>
@@ -524,6 +454,26 @@ export const PackingTab: React.FC<PackingTabProps> = ({
                     </span>
                   </button>
 
+                  {/* Product/Dish Thumbnail with Zoom */}
+                  {item.imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewImageModalUrl(item.imageUrl!)}
+                      className="group relative shrink-0 mt-0.5 cursor-zoom-in rounded-lg overflow-hidden border border-mist-deep shadow-2xs"
+                      title="กดเพื่อดูรูปภาพขนาดใหญ่"
+                    >
+                      <img
+                        src={item.imageUrl}
+                        alt={item.title}
+                        className="w-12 h-12 sm:w-14 sm:h-14 object-cover group-hover:scale-105 transition-transform"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-black/25 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                        <Eye className="w-3.5 h-3.5 drop-shadow" />
+                      </div>
+                    </button>
+                  )}
+
                   {/* Title & Metadata */}
                   <div className="flex-1 min-w-0 sm:flex sm:items-center sm:justify-between sm:gap-4">
                     <div className="min-w-0">
@@ -537,7 +487,7 @@ export const PackingTab: React.FC<PackingTabProps> = ({
                         {item.title}
                       </p>
 
-                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-fine text-stone">
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-fine text-stone">
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[11px] font-medium ${
                             item.category === 'shared'
@@ -553,6 +503,45 @@ export const PackingTab: React.FC<PackingTabProps> = ({
                           <span className="inline-flex items-center gap-1 text-[11px] text-brass">
                             <UtensilsCrossed className="w-3 h-3" />
                             สำหรับ: {forDish}
+                          </span>
+                        )}
+
+                        {/* Makro Pro Product Link / Search Shortcut */}
+                        {item.makroUrl ? (
+                          <a
+                            href={item.makroUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#fee9ec] text-[#e82026] hover:bg-[#fed2d8] border border-[#fcc5cd] transition-colors"
+                            title="เปิดดูสินค้าบน Makro Pro"
+                          >
+                            <span className="font-bold text-[9px] bg-[#e82026] text-white px-1 rounded-sm leading-none py-0.5">
+                              PRO
+                            </span>
+                            <span>ดูใน Makro Pro</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ) : item.category === 'shared' || forDish ? (
+                          <a
+                            href={`https://www.makro.pro/th/search?q=${encodeURIComponent(
+                              item.title.replace(/\(.*?\)/g, '').trim()
+                            )}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-surface text-stone hover:text-[#e82026] hover:bg-[#fee9ec] border border-mist-deep hover:border-[#fcc5cd] transition-colors"
+                            title="ค้นหาชื่อนี้บน Makro Pro"
+                          >
+                            <span className="font-bold text-[9px] bg-stone/70 text-white px-1 rounded-sm leading-none py-0.5">
+                              PRO
+                            </span>
+                            <span>ค้นใน Makro</span>
+                            <ExternalLink className="w-2.5 h-2.5 opacity-60" />
+                          </a>
+                        ) : null}
+
+                        {item.notes && (
+                          <span className="text-[11px] text-stone italic">
+                            • {item.notes}
                           </span>
                         )}
 
@@ -645,35 +634,6 @@ export const PackingTab: React.FC<PackingTabProps> = ({
           onClose={() => setIsModalOpen(false)}
         >
           <form onSubmit={handleSaveItemSubmit} className="space-y-4">
-            {/* Quick Suggestion Chips */}
-            {!editingItem && (
-              <div>
-                <span className="block text-[11px] text-stone mb-1.5">
-                  เลือกรายการแนะนำด่วน:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    'ชุดว่ายน้ำ',
-                    'แว่นกันแดด',
-                    'ปลั๊กพ่วง 3 ตา',
-                    'ลำโพงบลูทูธ',
-                    'น้ำจิ้มสุกี้',
-                    'สเปรย์กันยุง',
-                    'ถุงขยะดำ',
-                  ].map((presetName) => (
-                    <button
-                      key={presetName}
-                      type="button"
-                      onClick={() => setItemTitle(presetName)}
-                      className="px-2.5 py-1 rounded-full bg-surface hover:bg-mist-deep text-[11px] text-ink transition-colors cursor-pointer"
-                    >
-                      {presetName}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             <Field label="ชื่อสิ่งของ" htmlFor="item-title">
               <input
                 id="item-title"
@@ -742,6 +702,107 @@ export const PackingTab: React.FC<PackingTabProps> = ({
               </Field>
             )}
 
+            {/* Makro Pro Product Link */}
+            <Field
+              label="ลิงก์สินค้า Makro Pro (ไม่บังคับ)"
+              htmlFor="item-makro"
+              hint="ใส่ลิงก์สินค้าจาก makro.pro หรือกดปุ่มค้นหาเพื่อเปิดดูสินค้า"
+            >
+              <div className="flex gap-2">
+                <input
+                  id="item-makro"
+                  type="url"
+                  value={itemMakroUrl}
+                  onChange={(e) => setItemMakroUrl(e.target.value)}
+                  placeholder="https://www.makro.pro/th/p/..."
+                  className={input}
+                />
+                <a
+                  href={`https://www.makro.pro/th/search?q=${encodeURIComponent(
+                    itemTitle.replace(/\(.*?\)/g, '').trim() || 'ของสด'
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-ctl bg-[#fee9ec] text-[#e82026] hover:bg-[#fed2d8] border border-[#fcc5cd] text-fine font-medium transition-colors shrink-0"
+                  title="เปิดค้นหาชื่อนี้บน Makro Pro เพื่อคัดลอกลิงก์"
+                >
+                  <Search className="w-3.5 h-3.5" />
+                  <span>ค้นใน Makro</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </Field>
+
+            {/* Image Attachment (URL or File Upload) */}
+            <Field
+              label="รูปภาพสินค้า / สิ่งของ (ไม่บังคับ)"
+              htmlFor="item-image"
+              hint="วางลิงก์รูปภาพ หรือกดอัปโหลดรูปจากโทรศัพท์/คอมพิวเตอร์"
+            >
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    id="item-image"
+                    type="url"
+                    value={itemImageUrl}
+                    onChange={(e) => setItemImageUrl(e.target.value)}
+                    placeholder="https://... ลิงก์รูปภาพ"
+                    className={input}
+                  />
+                  <label className="inline-flex items-center gap-1.5 px-3 py-2 rounded-ctl bg-surface hover:bg-mist-deep border border-mist-deep text-ink text-fine font-medium cursor-pointer transition-colors shrink-0">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>อัปโหลดรูป</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          try {
+                            const dataUrl = await compressImageFile(file);
+                            setItemImageUrl(dataUrl);
+                          } catch (err) {
+                            console.error('Error reading image file', err);
+                          }
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+
+                {itemImageUrl && (
+                  <div className="relative inline-block mt-1">
+                    <img
+                      src={itemImageUrl}
+                      alt="Preview"
+                      className="w-20 h-20 rounded-lg object-cover border border-mist-deep shadow-2xs"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setItemImageUrl('')}
+                      className="absolute -top-1.5 -right-1.5 p-1 bg-ink text-paper rounded-full hover:bg-red-600 transition-colors shadow-xs cursor-pointer"
+                      title="ลบรูป"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </Field>
+
+            {/* Item Notes */}
+            <Field label="บันทึกเพิ่มเติม / ระบุยี่ห้อหรือขนาด" htmlFor="item-notes">
+              <input
+                id="item-notes"
+                type="text"
+                value={itemNotes}
+                onChange={(e) => setItemNotes(e.target.value)}
+                placeholder="เช่น เอาขนาด 1 กิโลกรัม, ซื้อที่ Makro ปากช่อง"
+                className={input}
+              />
+            </Field>
+
             <div className="flex gap-3 pt-3">
               <button
                 type="button"
@@ -756,6 +817,32 @@ export const PackingTab: React.FC<PackingTabProps> = ({
             </div>
           </form>
         </Modal>
+      )}
+
+      {/* Image Lightbox Modal */}
+      {previewImageModalUrl && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 cursor-pointer backdrop-blur-xs"
+          onClick={() => setPreviewImageModalUrl(null)}
+        >
+          <div
+            className="relative max-w-2xl max-h-[85vh] bg-paper rounded-panel overflow-hidden border border-mist-deep shadow-2xl p-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={previewImageModalUrl}
+              alt="Item Preview"
+              className="w-full h-auto max-h-[75vh] object-contain rounded-lg"
+            />
+            <button
+              onClick={() => setPreviewImageModalUrl(null)}
+              className="absolute top-4 right-4 p-1.5 bg-ink/80 text-white rounded-full hover:bg-ink transition-colors cursor-pointer shadow-md"
+              title="ปิด"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -11,7 +11,6 @@ import { MembersTab } from './components/MembersTab';
 import { DayOfTab } from './components/DayOfTab';
 import { SyncModal } from './components/SyncModal';
 import { ShareModal } from './components/ShareModal';
-import { TripSecretary } from './components/TripSecretary';
 import { TripData, Member, TripListName } from './types/trip';
 import { initialTripData } from './data/initialData';
 import {
@@ -337,15 +336,6 @@ export function App() {
         isOpen={isShareModalOpen}
         onClose={() => setIsShareModalOpen(false)}
         trip={trip}
-      />
-
-      {/* AI Secretary Floating Assistant */}
-      <TripSecretary
-        trip={trip}
-        me={me}
-        setActiveTab={setActiveTab}
-        onSaveItem={handleSaveItem}
-        onRemoveItem={handleRemoveItem}
       />
     </div>
   );

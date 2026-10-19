@@ -91,6 +91,8 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
   const [category, setCategory] = useState<MenuIdea['category']>('grill');
   const [meal, setMeal] = useState<MenuIdea['meal']>('dinner');
   const [perHead, setPerHead] = useState('');
+  const [totalPrice, setTotalPrice] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [suggestedBy, setSuggestedBy] = useState('');
   const [notes, setNotes] = useState('');
   const [ingredients, setIngredients] = useState('');
@@ -108,6 +110,11 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
     (sum, m) => sum + (m.estimatedPerHead ?? 0),
     0
   );
+  const totalGroupBudget = shortlisted.reduce(
+    (sum, m) =>
+      sum + (m.totalEstimatedPrice ?? (m.estimatedPerHead ? m.estimatedPerHead * eaters : 0)),
+    0
+  );
 
   const openNewModal = () => {
     setEditingMenu(null);
@@ -115,6 +122,8 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
     setCategory('grill');
     setMeal('dinner');
     setPerHead('');
+    setTotalPrice('');
+    setImageUrl('');
     setSuggestedBy(me?.nickname ?? '');
     setNotes('');
     setIngredients('');
@@ -127,6 +136,8 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
     setCategory(item.category);
     setMeal(item.meal);
     setPerHead(item.estimatedPerHead ? String(item.estimatedPerHead) : '');
+    setTotalPrice(item.totalEstimatedPrice ? String(item.totalEstimatedPrice) : '');
+    setImageUrl(item.imageUrl ?? '');
     setSuggestedBy(item.suggestedBy);
     setNotes(item.notes ?? '');
     setIngredients((item.ingredients ?? []).join('\n'));
@@ -138,14 +149,22 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
     if (!title.trim()) return;
 
     const price = Number(perHead);
+    const totPrice = Number(totalPrice);
     const fields = {
       title: title.trim(),
       category,
       meal,
       suggestedBy: suggestedBy.trim() || me?.nickname || 'เพื่อนร่วมทริป',
       notes: notes.trim() || undefined,
+      totalEstimatedPrice:
+        totalPrice.trim() && Number.isFinite(totPrice) && totPrice > 0 ? totPrice : undefined,
       estimatedPerHead:
-        perHead.trim() && Number.isFinite(price) && price > 0 ? price : undefined,
+        perHead.trim() && Number.isFinite(price) && price > 0
+          ? price
+          : totalPrice.trim() && Number.isFinite(totPrice) && totPrice > 0
+          ? Math.round(totPrice / eaters)
+          : undefined,
+      imageUrl: imageUrl.trim() || undefined,
       ingredients: parseIngredients(ingredients),
     };
 
@@ -197,12 +216,15 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
     let n = 0;
     for (const item of items) {
       for (const name of pendingFor(item)) {
+        const keyword = name.replace(/\(.*?\)/g, '').trim();
         const packed: PackingItem = {
           id: `p-${Date.now()}-${n}`,
           title: name,
           category: 'shared',
           isPacked: false,
           fromMenuId: item.id,
+          imageUrl: item.imageUrl,
+          makroUrl: `https://www.makro.pro/th/search?q=${encodeURIComponent(keyword)}`,
         };
         onSaveItem('packingList', packed);
         n += 1;
@@ -291,16 +313,15 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
           </div>
 
           <div className="p-2 pt-4 md:pt-2 md:pl-6">
-            <span className="text-fine text-stone block">ค่าอาหารประเมิน / คน</span>
+            <span className="text-fine text-stone block">งบอาหาร & บาร์ รวมทั้งกลุ่ม</span>
             <div className="mt-1 flex items-baseline gap-2">
-              <span className="font-display text-2xl font-semibold text-ink">
-                {estimatedPerHead > 0 ? baht(estimatedPerHead) : '—'}
+              <span className="font-display text-2xl font-semibold text-brass">
+                {totalGroupBudget > 0 ? baht(totalGroupBudget) : '—'}
               </span>
-              <span className="text-fine text-stone">/ คน</span>
             </div>
             <span className="text-fine text-stone/80 mt-1 block">
-              {estimatedPerHead > 0
-                ? `รวมทั้งกลุ่ม ≈ ${baht(estimatedPerHead * Math.max(eaters, 1))}`
+              {totalGroupBudget > 0
+                ? `เฉลี่ยคนละ ≈ ${baht(Math.round(totalGroupBudget / Math.max(eaters, 1)))} (คำนวณจาก ${eaters} คน)`
                 : 'ระบุราคาในเมนูเพื่อคำนวณ'}
             </span>
           </div>
@@ -492,18 +513,41 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
                           </div>
                         </div>
 
+                        {/* Dish / Product Image from Makro Pro */}
+                        {item.imageUrl && (
+                          <div className="relative w-full h-44 mb-3.5 rounded-lg overflow-hidden border border-mist-deep bg-mist/20">
+                            <img
+                              src={item.imageUrl}
+                              alt={item.title}
+                              className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
+                              loading="lazy"
+                            />
+                          </div>
+                        )}
+
                         {/* Title & Proposer */}
                         <h3 className="font-display text-lead text-ink font-semibold">
                           {item.title}
                         </h3>
 
-                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-fine text-stone">
-                          <span>เสนอโดย <strong className="text-ink font-medium">{item.suggestedBy}</strong></span>
-                          {item.estimatedPerHead && (
-                            <span className="inline-flex items-center gap-1 font-medium text-brass">
-                              <Coins className="w-3.5 h-3.5" />
-                              ราว {baht(item.estimatedPerHead)} / คน
-                            </span>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-fine text-stone">
+                          <span>
+                            เสนอโดย <strong className="text-ink font-medium">{item.suggestedBy}</strong>
+                          </span>
+                          {(item.totalEstimatedPrice || item.estimatedPerHead) && (
+                            <div className="inline-flex items-center gap-1.5 flex-wrap">
+                              {item.totalEstimatedPrice && (
+                                <span className="inline-flex items-center gap-1 font-semibold text-brass px-2 py-0.5 rounded-md bg-brass/10 border border-brass/25 text-fine">
+                                  <Coins className="w-3.5 h-3.5" />
+                                  งบรวม {baht(item.totalEstimatedPrice)}
+                                </span>
+                              )}
+                              {item.estimatedPerHead && (
+                                <span className="text-[12px] text-stone font-medium">
+                                  (~{baht(item.estimatedPerHead)} / คน)
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
 
@@ -715,9 +759,30 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field
-                label="ประเมินงบประมาณต่อคน (บาท)"
+                label="งบประมาณรวมทั้งเมนู (บาท)"
+                htmlFor="menu-total-price"
+                hint="เช่น 1650 หรือ 450 (คำนวณเฉลี่ยต่อคนให้อัตโนมัติ)"
+              >
+                <input
+                  id="menu-total-price"
+                  type="number"
+                  min={0}
+                  value={totalPrice}
+                  onChange={(e) => {
+                    setTotalPrice(e.target.value);
+                    if (e.target.value && Number(e.target.value) > 0) {
+                      setPerHead(String(Math.round(Number(e.target.value) / eaters)));
+                    }
+                  }}
+                  placeholder="เช่น 1650"
+                  className={input}
+                />
+              </Field>
+
+              <Field
+                label="งบเฉลี่ยต่อคน (บาท)"
                 htmlFor="menu-price"
-                hint="ไม่บังคับ ใส่เพื่อประเมินค่าใช้จ่ายคร่าวๆ"
+                hint="คำนวณอัตโนมัติหรือระบุเอง"
               >
                 <input
                   id="menu-price"
@@ -725,11 +790,13 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
                   min={0}
                   value={perHead}
                   onChange={(e) => setPerHead(e.target.value)}
-                  placeholder="เช่น 100 หรือ 150"
+                  placeholder="เช่น 165"
                   className={input}
                 />
               </Field>
+            </div>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="เสนอโดย" htmlFor="menu-by">
                 <input
                   id="menu-by"
@@ -738,6 +805,17 @@ export const FoodTab: React.FC<FoodTabProps> = ({ trip, onSaveItem, onRemoveItem
                   value={suggestedBy}
                   onChange={(e) => setSuggestedBy(e.target.value)}
                   placeholder="ชื่อเล่นของคุณ"
+                  className={input}
+                />
+              </Field>
+
+              <Field label="ลิงก์รูปภาพสินค้า / อาหาร (Image URL)" htmlFor="menu-image">
+                <input
+                  id="menu-image"
+                  type="url"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="https://... ลิงก์รูปภาพอาหารหรือสินค้า Makro"
                   className={input}
                 />
               </Field>

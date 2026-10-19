@@ -22,7 +22,6 @@ import {
   Search,
   Users,
   RotateCcw,
-  Sparkles,
   FileCheck,
   ExternalLink,
   ShieldCheck,
@@ -81,38 +80,6 @@ const CATEGORY_CONFIG: Record<
     borderClass: 'border-mist-deep',
   },
 };
-
-const SUGGESTED_PRESETS: Array<{
-  title: string;
-  category: Expense['category'];
-  amount: number;
-  notes: string;
-}> = [
-  {
-    title: 'มัดจำที่พัก Harper Pool Villa Khaoyai',
-    category: 'accommodation',
-    amount: 12900,
-    notes: 'บ้านพักสไตล์มินิมอลญี่ปุ่น 4 ห้องนอน 4 ห้องน้ำ คืน 31 ต.ค.',
-  },
-  {
-    title: 'เสบียงบาร์บีคิว & เครื่องดื่ม (แม็คโคร ปากช่อง)',
-    category: 'food',
-    amount: 4200,
-    notes: 'เนื้อย่าง หมูหมัก ผักสด ขนม และเครื่องดื่มปาร์ตี้ริมสระ',
-  },
-  {
-    title: 'บัตรประลองความเร็ว Khaoyai Speedkart',
-    category: 'tickets',
-    amount: 2800,
-    notes: 'รอบประลองโกคาร์ทช่วงสาย',
-  },
-  {
-    title: 'ค่าน้ำมัน & ทางด่วน มุ่งหน้าสู่เขาใหญ่',
-    category: 'fuel',
-    amount: 1200,
-    notes: 'ค่าน้ำมันและค่าผ่านทางกองกลาง',
-  },
-];
 
 export const ExpensesTab: React.FC<ExpensesTabProps> = ({
   trip,
@@ -222,67 +189,12 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({
     setExpandedExpenseIds((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const handleSeedSampleExpenses = () => {
-    const p0 = trip.members[0]?.id || 'm-1';
-    const p1 = trip.members[1]?.id || p0;
-    const p2 = trip.members[2]?.id || p0;
-    const p3 = trip.members[3]?.id || p0;
-
-    const sampleItems: Expense[] = [
-      {
-        id: `exp-${Date.now()}-1`,
-        title: 'มัดจำที่พัก Harper Pool Villa Khaoyai',
-        amount: 12900,
-        payerId: p0,
-        category: 'accommodation',
-        date: '2026-10-31',
-        notes: 'บ้านพักสไตล์มินิมอลญี่ปุ่น 4 ห้องนอน 4 ห้องน้ำ สระน้ำเกลือ',
-      },
-      {
-        id: `exp-${Date.now()}-2`,
-        title: 'เสบียงบาร์บีคิว & เครื่องดื่ม (แม็คโคร ปากช่อง)',
-        amount: 4200,
-        payerId: p1,
-        category: 'food',
-        date: '2026-10-31',
-        notes: 'เนื้อริบอาย, หมูหมัก, ผักสด, ขนม และเครื่องดื่มปาร์ตี้ริมสระ',
-      },
-      {
-        id: `exp-${Date.now()}-3`,
-        title: 'บัตรประลองความเร็ว Khaoyai Speedkart',
-        amount: 2800,
-        payerId: p2,
-        category: 'tickets',
-        date: '2026-10-31',
-        notes: 'รอบประลองโกคาร์ทช่วงสาย',
-      },
-      {
-        id: `exp-${Date.now()}-4`,
-        title: 'ค่าน้ำมัน & ทางด่วน มุ่งหน้าสู่เขาใหญ่',
-        amount: 1200,
-        payerId: p3,
-        category: 'fuel',
-        date: '2026-10-31',
-        notes: 'ค่าน้ำมันและค่าผ่านทางกองกลาง',
-      },
-    ];
-
-    sampleItems.forEach((item) => onSaveItem('expenses', item));
-  };
-
-  const handleOpenNewModal = (preset?: (typeof SUGGESTED_PRESETS)[0]) => {
+  const handleOpenNewModal = () => {
     setEditingExpense(null);
-    if (preset) {
-      setTitle(preset.title);
-      setAmount(preset.amount);
-      setCategory(preset.category);
-      setNotes(preset.notes);
-    } else {
-      setTitle('');
-      setAmount('');
-      setCategory('food');
-      setNotes('');
-    }
+    setTitle('');
+    setAmount('');
+    setCategory('food');
+    setNotes('');
     setPayerId(defaultPayerId);
     setDate('2026-10-31');
     setSplitBetween([]);
@@ -751,57 +663,6 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({
               })}
             </div>
           </div>
-
-          {/* Quick Suggestion Presets (Shown when 0 or few expenses) */}
-          {trip.expenses.length === 0 && (
-            <div className="bg-paper rounded-panel p-5 border border-dashed border-brass/50 bg-[#fffdfa]">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-3">
-                <div className="flex items-center gap-2 text-fine text-brass font-medium">
-                  <Sparkles className="w-4 h-4 text-brass shrink-0" />
-                  <span>คลิกเพื่อเพิ่มรายการยอดนิยมของทริปเขาใหญ่ทันที (Presets)</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSeedSampleExpenses}
-                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brass/15 text-brass text-fine font-medium hover:bg-brass hover:text-paper transition-colors cursor-pointer self-start sm:self-auto"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>โหลด 4 รายการแนะนำทั้งหมด</span>
-                </button>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {SUGGESTED_PRESETS.map((preset, idx) => {
-                  const Icon = CATEGORY_CONFIG[preset.category].icon;
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => handleOpenNewModal(preset)}
-                      className="flex items-start justify-between gap-3 p-3 rounded-ctl bg-paper border border-mist-deep hover:border-brass/70 text-left transition-colors group cursor-pointer"
-                    >
-                      <div className="flex items-start gap-2.5 min-w-0">
-                        <div
-                          className={`p-1.5 rounded-md ${
-                            CATEGORY_CONFIG[preset.category].pillClass
-                          } shrink-0 mt-0.5`}
-                        >
-                          <Icon className="w-3.5 h-3.5" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-fine font-medium text-ink group-hover:text-brass transition-colors truncate">
-                            {preset.title}
-                          </p>
-                          <p className="text-[11px] text-stone truncate">{preset.notes}</p>
-                        </div>
-                      </div>
-                      <span className="text-fine font-semibold font-mono text-ink shrink-0 tabular-nums">
-                        {baht(preset.amount)}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* Expenses List */}
           {filteredExpenses.length === 0 ? (
@@ -1501,32 +1362,6 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({
           wide
         >
           <form onSubmit={handleSaveExpense} className="space-y-5">
-            {/* Quick Title Suggestions */}
-            {!editingExpense && (
-              <div>
-                <span className="block text-[11px] text-stone mb-1.5">
-                  เลือกรายการแนะนำด่วน:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {SUGGESTED_PRESETS.map((p, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => {
-                        setTitle(p.title);
-                        setAmount(p.amount);
-                        setCategory(p.category);
-                        setNotes(p.notes);
-                      }}
-                      className="px-2.5 py-1 rounded-full bg-surface hover:bg-mist-deep text-[11px] text-ink transition-colors cursor-pointer"
-                    >
-                      {p.title}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Title */}
             <Field label="ชื่อรายการค่าใช้จ่าย" htmlFor="exp-title">
               <input
@@ -1600,8 +1435,7 @@ export const ExpensesTab: React.FC<ExpensesTabProps> = ({
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                   className={input}
-                >
-                </input>
+                />
               </Field>
             </div>
 

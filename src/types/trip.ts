@@ -118,6 +118,10 @@ export interface MenuIdea {
   meal: 'dinner' | 'breakfast' | 'latenight' | 'anytime';
   /** Rough baht per head, used only to sketch the food budget. */
   estimatedPerHead?: number;
+  /** Total estimated budget for the dish/item */
+  totalEstimatedPrice?: number;
+  /** Image URL of the dish or product from Makro Pro */
+  imageUrl?: string;
   /**
    * What has to be bought or carried up the hill for this dish. Kept on the
    * dish rather than typed into the packing list twice, so a menu that wins
@@ -198,6 +202,12 @@ export interface PackingItem {
   isPacked: boolean;
   /** Set when the item was broken out of a dish on the menu. */
   fromMenuId?: string;
+  /** Optional product/item image URL */
+  imageUrl?: string;
+  /** Optional Makro Pro link or store URL */
+  makroUrl?: string;
+  /** Optional notes or specifications */
+  notes?: string;
 }
 
 export interface Announcement {
